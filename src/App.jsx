@@ -1,616 +1,1786 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from './supabase.js'
+import { useState, useEffect, useRef } from "react";
+import {
+  Waves, Bike, Footprints, Dumbbell, Zap, HeartPulse,
+  Home, FileText, Bot, Calendar, Swords, BarChart2, User,
+  Trophy, Flame, Clock, CalendarDays, ChevronDown, Check, X,
+  Trash2, Edit2, Play, Medal, Settings, Download, Loader2, Plus,
+  Heart
+} from "lucide-react";
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
+// ─── ANTHROPIC API ───────────────────────────────────────────────────────────
+async function callClaude(systemPrompt, userMessage, history = []) {
+  const messages = [...history, { role: "user", content: userMessage }];
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+  const data = await res.json();
+  return data.content?.map((b) => b.text || "").join("") || "Erreur IA.";
+}
+
+// ─── DATA ─────────────────────────────────────────────────────────────────────
 const USERS = {
-  louis: { name: 'Louis', accent: '#0066cc', avatar: 'L', profile: 'Musculation 3 ans, régulier 1 an (4x/sem). Bonne base de force. Ne court pas. Sait nager.' },
-  romain: { name: 'Romain', accent: '#cc3300', avatar: 'R', profile: 'Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT.' },
-}
-const DISCIPLINES = ['Natation', 'Vélo', 'Course à pied', 'Musculation', 'Brick', 'Récupération']
-const ICONS = { Natation: '🏊', Vélo: '🚴', 'Course à pied': '🏃', Musculation: '💪', Brick: '⚡', Récupération: '🧘' }
-const RACE_DATE = new Date('2026-12-15')
-const PLAN = {
-  louis: [
-    { phase: 'Fondation', period: 'Juin – Août', detail: '3 séances / semaine · Musculation gainage 2× · RPE 5–6' },
-    { phase: 'Développement', period: 'Septembre – Octobre', detail: '4 séances / semaine · Bricks introduits · +10% volume/sem' },
-    { phase: 'Spécifique', period: 'Novembre', detail: '5 séances / semaine · Allures cibles · Gainage uniquement' },
-    { phase: 'Affûtage', period: 'Décembre', detail: 'Volume −40% · Simulation course · Récupération active' },
-  ],
-  romain: [
-    { phase: 'Fondation', period: 'Juin – Août', detail: '2 séances / semaine · Courir 20min + nager 200m · RPE 4–5' },
-    { phase: 'Développement', period: 'Septembre – Octobre', detail: '3 séances / semaine · Vélo introduit · Premiers bricks' },
-    { phase: 'Spécifique', period: 'Novembre', detail: '4 séances / semaine · Distances cibles sur chaque discipline' },
-    { phase: 'Affûtage', period: 'Décembre', detail: 'Volume réduit · Confiance · Simulation course complète' },
-  ],
-}
+  louis: {
+    name: "Louis",
+    color: "#007AFF", // Apple blue
+    avatar: "L",
+    profile: "Pratique la musculation depuis 3 ans, régulier depuis 1 an (4x/sem min). Bonne base de force. Ne court pas. Sait nager. Prévoit d'acheter un vélo de route.",
+  },
+  romain: {
+    name: "Romain",
+    color: "#FF3B30", // Apple red/orange
+    avatar: "R",
+    profile: "Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT, prévoit d'acheter un vélo de route.",
+  },
+};
 
-// ─── API PROXY ────────────────────────────────────────────────────────────────
-async function askCoach(system, messages) {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ system, messages }),
-  })
-  const data = await res.json()
-  if (data.error) throw new Error(data.error)
-  return data.content?.map(b => b.text || '').join('') || ''
-}
+const RACE_DATE = new Date("2026-12-15");
 
-function buildSystem(uid, sessions, wellness) {
-  const s = sessions.filter(x => x.user_id === uid).slice(-15)
-  const w = wellness.filter(x => x.user_id === uid).slice(-7)
-  return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
-PROFIL : ${USERS[uid].profile}
-OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026.
-SÉANCES RÉCENTES :
-${s.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10`).join('\n') || 'Aucune séance encore.'}
-BIEN-ÊTRE :
-${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Fatigue ${x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
-Réponds en français, de façon directe, bienveillante et concrète.`
-}
+const DISCIPLINES = ["Natation", "Vélo", "Course à pied", "Musculation", "Brick", "Récupération active"];
+const getDiscIcon = (name, size = 18) => {
+  switch(name) {
+    case "Natation": return <Waves size={size} />;
+    case "Vélo": return <Bike size={size} />;
+    case "Course à pied": return <Footprints size={size} />;
+    case "Musculation": return <Dumbbell size={size} />;
+    case "Brick": return <Zap size={size} />;
+    case "Récupération active": return <HeartPulse size={size} />;
+    default: return <Activity size={size} />;
+  }
+};
 
-// ─── UTILS ───────────────────────────────────────────────────────────────────
-const todayStr = () => new Date().toISOString().slice(0, 10)
-const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
-const sevenDaysAgo = () => { const d = new Date(); d.setDate(d.getDate() - 7); d.setHours(0,0,0,0); return d }
+const MILESTONES = {
+  Natation: { label: "Nager 750m sans s'arrêter", target: 750, unit: "m", icon: <Waves size={16}/> },
+  Vélo: { label: "Tenir 20km à rythme soutenu", target: 20, unit: "km", icon: <Bike size={16}/> },
+  "Course à pied": { label: "Courir 5km sans marcher", target: 5, unit: "km", icon: <Footprints size={16}/> },
+};
 
-// ─── COLORS ──────────────────────────────────────────────────────────────────
-const C = {
-  white: '#ffffff', bg: '#f7f7f7',
-  gray100: '#efefef', gray200: '#e0e0e0', gray300: '#cccccc',
-  gray400: '#aaaaaa', gray500: '#888888', gray600: '#666666',
-  gray800: '#333333', black: '#111111',
+const EXERCISE_SUGGESTIONS = [
+  "Squat", "Front squat", "Squat bulgare", "Fentes", "Presse à cuisses",
+  "Leg curl", "Leg extension", "Hip thrust", "Deadlift", "Soulevé de terre roumain",
+  "Développé couché", "Développé incliné", "Développé militaire", "Pompes",
+  "Tractions", "Rowing barre", "Rowing haltère", "Tirage vertical",
+  "Gainage frontal", "Gainage latéral", "Russian twist", "Crunch",
+  "Curl biceps", "Extensions triceps", "Élévations latérales",
+  "Mollets debout", "Mollets assis", "Step-ups", "Box jumps",
+];
+
+function useStorage(key, init) {
+  const [val, setVal] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(key)) ?? init; } catch { return init; }
+  });
+  useEffect(() => { localStorage.setItem(key, JSON.stringify(val)); }, [key, val]);
+  return [val, setVal];
 }
 
-// ─── ATOMS ───────────────────────────────────────────────────────────────────
-const Label = ({ children }) => (
-  <div style={{ fontSize: 11, fontWeight: 600, color: C.gray400, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>{children}</div>
-)
+function daysUntilRace() {
+  return Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000));
+}
 
-const Tag = ({ children, color }) => (
-  <span style={{ display: 'inline-flex', padding: '3px 9px', borderRadius: 6, background: `${color}15`, color, fontSize: 12, fontWeight: 600 }}>{children}</span>
-)
+function weekKey(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
-const Divider = () => <div style={{ height: 1, background: C.gray100, margin: '28px 0' }} />
+// ─── COACH SYSTEM PROMPT ─────────────────────────────────────────────────────
+function buildCoachPrompt(user, sessions, wellness) {
+  const uid = user === "louis" ? "louis" : "romain";
+  const otherUid = uid === "louis" ? "romain" : "louis";
+  const userSessions = sessions.filter(s => s.user === uid).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const otherSessions = sessions.filter(s => s.user === otherUid).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const userWellness = wellness.filter(w => w.user === uid).sort((a, b) => b.date.localeCompare(a.date));
+  const otherWellness = wellness.filter(w => w.user === otherUid).sort((a, b) => b.date.localeCompare(a.date));
 
-const PBar = ({ pct, color }) => (
-  <div style={{ height: 3, background: C.gray100, borderRadius: 99, overflow: 'hidden' }}>
-    <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 99, transition: 'width 0.6s ease' }} />
-  </div>
-)
+  // Compute weekly stats
+  const weekStats = (sess) => {
+    const now = new Date();
+    const weeks = [{}, {}]; // current week, last week
+    for (let w = 0; w < 2; w++) {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay() + 1 - w * 7);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+      const wSess = sess.filter(s => { const d = new Date(s.date); return d >= start && d < end; });
+      weeks[w] = {
+        count: wSess.length,
+        totalMin: wSess.reduce((a, s) => a + (+s.duration || 0), 0),
+        avgRpe: wSess.length ? (wSess.reduce((a, s) => a + (+s.rpe || 0), 0) / wSess.length).toFixed(1) : "—",
+        byDisc: DISCIPLINES.map(d => {
+          const ds = wSess.filter(s => s.discipline === d);
+          return ds.length ? `${d}:${ds.length}x/${ds.reduce((a, s) => a + (+s.duration || 0), 0)}min` : null;
+        }).filter(Boolean).join(", "),
+      };
+    }
+    return weeks;
+  };
 
-const Avatar = ({ uid, size = 34 }) => (
-  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 700, flexShrink: 0 }}>
-    {USERS[uid].avatar}
-  </div>
-)
+  const [thisWeek, lastWeek] = weekStats(userSessions);
+  const [otherThisWeek] = weekStats(otherSessions);
 
-const inputStyle = (extra = {}) => ({
-  width: '100%', padding: '11px 13px', fontSize: 15,
-  background: C.bg, border: `1px solid ${C.gray200}`, borderRadius: 10,
-  color: C.black, outline: 'none', fontFamily: 'inherit', ...extra,
-})
+  // Format session line
+  const fmtSession = (s) => {
+    let line = `- ${s.date} | ${s.discipline} | ${s.duration}min | RPE ${s.rpe}/10`;
+    if (s.distance) line += ` | ${s.distance}${s.distanceUnit || ''}`;
+    if (s.allure) line += ` | Allure: ${s.allure}`;
+    if (s.vitesse) line += ` | ${s.vitesse}km/h`;
+    if (s.denivele) line += ` | D+${s.denivele}m`;
+    if (s.nageType) line += ` | ${s.nageType}`;
+    if (s.veloType) line += ` | ${s.veloType}`;
+    if (s.capType) line += ` | ${s.capType}`;
+    if (s.muscuFocus) line += ` | Focus: ${s.muscuFocus}`;
+    if (s.exercises && s.exercises.length) line += ` | Exos: ${s.exercises.map(e => `${e.name}(${e.sets?.map(st => `${st.weight}kg×${st.reps}`).join(',')})`).join('; ')}`;
+    if (s.conditions) line += ` | Conditions: ${s.conditions}`;
+    if (s.notes) line += ` | Notes: ${s.notes}`;
+    return line;
+  };
+
+  // Wellness averages
+  const wellAvg = (wArr) => {
+    if (!wArr.length) return "Aucune donnée";
+    const n = Math.min(wArr.length, 7);
+    const recent = wArr.slice(0, n);
+    const avg = (k) => (recent.reduce((a, w) => a + (w[k] || 0), 0) / n).toFixed(1);
+    return `Moy 7j: Sommeil ${avg("sleep")}/5 | Fatigue ${avg("fatigue")}/5 | Humeur ${avg("mood")}/5`;
+  };
+
+  return `Tu es un coach expert en triathlon, préparation physique et nutrition sportive. Tu coaches deux athlètes : Louis et Romain.
+
+═══ UTILISATEUR ACTUEL : ${USERS[uid].name} ═══
+${USERS[uid].profile}
+
+═══ OBJECTIF COMMUN ═══
+Triathlon Sprint (750m natation / 20km vélo / 5km CAP) — Décembre 2026
+Début préparation structurée : Juin 2026. Nous sommes le ${new Date().toLocaleDateString('fr-FR')}.
+Jours restants avant la course : ${daysUntilRace()}
+
+═══ CHARGE D'ENTRAÎNEMENT — ${USERS[uid].name} ═══
+Cette semaine : ${thisWeek.count} séances | ${thisWeek.totalMin}min | RPE moy ${thisWeek.avgRpe} | ${thisWeek.byDisc || "rien"}
+Semaine dernière : ${lastWeek.count} séances | ${lastWeek.totalMin}min | RPE moy ${lastWeek.avgRpe} | ${lastWeek.byDisc || "rien"}
+Évolution volume : ${lastWeek.totalMin ? ((thisWeek.totalMin - lastWeek.totalMin) / lastWeek.totalMin * 100).toFixed(0) : 0}%
+
+═══ 30 DERNIÈRES SÉANCES — ${USERS[uid].name} ═══
+${userSessions.slice(0, 30).map(fmtSession).join('\n') || 'Aucune séance'}
+
+═══ BIEN-ÊTRE — ${USERS[uid].name} ═══
+${wellAvg(userWellness)}
+Détail récent :
+${userWellness.slice(0, 14).map(w => `- ${w.date} | Sommeil:${w.sleep}/5 Fatigue:${w.fatigue}/5 Humeur:${w.mood}/5`).join('\n') || 'Aucune donnée'}
+
+═══ AUTRE ATHLÈTE : ${USERS[otherUid].name} (pour comparaison si demandé) ═══
+${USERS[otherUid].profile}
+Cette semaine : ${otherThisWeek.count} séances | ${otherThisWeek.totalMin}min | RPE moy ${otherThisWeek.avgRpe}
+Dernières séances :
+${otherSessions.slice(0, 10).map(fmtSession).join('\n') || 'Aucune séance'}
+Bien-être : ${wellAvg(otherWellness)}
+
+═══ TES DIRECTIVES ═══
+1. ANALYSE DE CHARGE : Compare le volume semaine actuelle vs précédente. Alerter si augmentation > 10% ou RPE moyen > 7.
+2. FATIGUE & RÉCUPÉRATION : Croise les données bien-être (sommeil, fatigue, humeur) avec la charge. Si fatigue élevée + mauvais sommeil → recommander allègement.
+3. PROGRESSION : Identifie les tendances (distances, allures, charges muscu) et donne un feedback sur la progression.
+4. ADAPTATION : Propose des ajustements concrets si besoin (réduire volume, changer intensité, ajouter récup, modifier répartition).
+5. ÉQUILIBRE DES DISCIPLINES : Vérifie que les 3 disciplines du tri sont travaillées. Signaler si une est négligée.
+6. MUSCULATION : Analyser les exercices, les charges, le volume (séries × reps). Vérifier la cohérence avec l'objectif tri.
+7. NUTRITION : Si demandé, donner des conseils macros et timing nutritionnel adaptés à la charge.
+8. BLESSURES : Si les notes mentionnent une douleur ou gêne, en tenir compte immédiatement.
+9. COMPARAISON : Si demandé, comparer objectivement les deux athlètes sur les mêmes métriques.
+10. Répondre en français, de façon directe, concrète et motivante. Pas de blabla.`;
+}
 
 // ─── COMPONENTS ──────────────────────────────────────────────────────────────
 
-function StatRow({ label, value, sub, color }) {
+function Countdown() {
+  const days = daysUntilRace();
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderBottom: `1px solid ${C.gray100}` }}>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px",
+    }}>
+      <span style={{ fontSize: 22 }}>🏁</span>
       <div>
-        <div style={{ fontSize: 15, color: C.black, fontWeight: 500 }}>{label}</div>
-        {sub && <div style={{ fontSize: 12, color: C.gray400, marginTop: 2 }}>{sub}</div>}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: color || C.black, letterSpacing: -0.5 }}>{value}</div>
-    </div>
-  )
-}
-
-function WellnessCheck({ uid, wellness, onSave }) {
-  const t = todayStr()
-  const ex = wellness.find(w => w.user_id === uid && w.date === t)
-  const [vals, setVals] = useState({ sleep: ex?.sleep || 3, fatigue: ex?.fatigue || 3, mood: ex?.mood || 3 })
-  const [saved, setSaved] = useState(!!ex)
-  const [saving, setSaving] = useState(false)
-
-  const score = Math.round(((vals.sleep + (6 - vals.fatigue) + vals.mood) / 13) * 100)
-  const scoreColor = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444'
-
-  const items = [
-    { key: 'sleep', label: 'Sommeil', emojis: ['😴','😞','😐','😊','🤩'], display: vals.sleep },
-    { key: 'fatigue', label: 'Énergie', emojis: ['🤩','😊','😐','😞','😴'], display: 6 - vals.fatigue },
-    { key: 'mood', label: 'Humeur', emojis: ['😞','😐','😊','😄','🤩'], display: vals.mood },
-  ]
-
-  const onChange = (key, displayVal) => {
-    const actual = key === 'fatigue' ? 6 - displayVal : displayVal
-    setVals(p => ({ ...p, [key]: actual }))
-    setSaved(false)
-  }
-
-  async function save() {
-    setSaving(true)
-    await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
-    await onSave(); setSaved(true); setSaving(false)
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-        <div style={{ fontSize: 14, color: C.gray500 }}>Comment tu te sens aujourd'hui ?</div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: scoreColor }}>{score}<span style={{ fontSize: 12, color: C.gray400, fontWeight: 400 }}>%</span></div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginBottom: 22 }}>
-        {items.map(item => (
-          <div key={item.key}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 14, color: C.black }}>{item.label}</span>
-              <span style={{ fontSize: 18 }}>{item.emojis[item.display - 1]}</span>
-            </div>
-            <input type="range" min="1" max="5" value={item.display}
-              onChange={e => onChange(item.key, +e.target.value)}
-              style={{ width: '100%', accentColor: USERS[uid].accent, cursor: 'pointer' }} />
-          </div>
-        ))}
-      </div>
-      <button onClick={save} disabled={saved || saving} style={{
-        width: '100%', padding: 13, borderRadius: 10, border: 'none',
-        background: saved ? C.gray100 : USERS[uid].accent,
-        color: saved ? C.gray400 : '#fff',
-        fontSize: 14, fontWeight: 600, cursor: saved ? 'default' : 'pointer', fontFamily: 'inherit',
-      }}>
-        {saving ? 'Enregistrement...' : saved ? '✓ Check-in enregistré' : 'Enregistrer le check-in'}
-      </button>
-    </div>
-  )
-}
-
-function MilestoneList({ uid, sessions }) {
-  const targets = [
-    { disc: 'Natation', label: '750m sans s\'arrêter', target: 750, toM: s => s.distance_unit === 'm' ? +s.distance : +s.distance * 1000 },
-    { disc: 'Vélo', label: '20km à rythme soutenu', target: 20000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
-    { disc: 'Course à pied', label: '5km sans marcher', target: 5000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
-  ]
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {targets.map(m => {
-        const best = sessions.filter(s => s.user_id === uid && s.discipline === m.disc && s.distance).reduce((mx, s) => Math.max(mx, m.toM(s)), 0)
-        const pct = (best / m.target) * 100
-        const done = pct >= 100
-        return (
-          <div key={m.disc}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{ICONS[m.disc]} {m.disc}</div>
-                <div style={{ fontSize: 12, color: C.gray400, marginTop: 1 }}>{m.label}</div>
-              </div>
-              {done ? <Tag color="#22c55e">Atteint 🏆</Tag> : <span style={{ fontSize: 13, fontWeight: 600, color: USERS[uid].accent }}>{Math.round(pct)}%</span>}
-            </div>
-            <PBar pct={pct} color={done ? '#22c55e' : USERS[uid].accent} />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function SessionList({ uid, sessions }) {
-  const list = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8)
-  if (!list.length) return <div style={{ fontSize: 14, color: C.gray400, padding: '20px 0' }}>Aucune séance encore. Lance-toi !</div>
-  return (
-    <div>
-      {list.map((s, i) => (
-        <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: i < list.length - 1 ? `1px solid ${C.gray100}` : 'none' }}>
-          <div style={{ fontSize: 22, width: 32, textAlign: 'center', flexShrink: 0 }}>{ICONS[s.discipline]}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>{s.discipline}</div>
-            <div style={{ fontSize: 12, color: C.gray400, marginTop: 1 }}>{s.date}</div>
-          </div>
-          <div style={{ textAlign: 'right', marginRight: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{s.duration}min</div>
-            {s.distance && <div style={{ fontSize: 12, color: C.gray400 }}>{s.distance}{s.distance_unit}</div>}
-          </div>
-          <Tag color={USERS[uid].accent}>RPE {s.rpe}</Tag>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function SessionForm({ uid, sessions, onSave, onAnalyze }) {
-  const [f, setF] = useState({ date: todayStr(), discipline: 'Course à pied', duration: '', distance: '', distance_unit: 'km', pace: '', hr_avg: '', hr_max: '', rpe: '6', notes: '' })
-  const [saving, setSaving] = useState(false)
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
-
-  const last = sessions.filter(s => s.user_id === uid && s.discipline === f.discipline).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
-  const delta = last && f.distance && last.distance ? ((+f.distance - +last.distance) / +last.distance * 100).toFixed(1) : null
-
-  async function submit() {
-    if (!f.duration) return
-    setSaving(true)
-    const session = { ...f, user_id: uid, duration: +f.duration, distance: f.distance ? +f.distance : null, hr_avg: f.hr_avg ? +f.hr_avg : null, hr_max: f.hr_max ? +f.hr_max : null, rpe: +f.rpe }
-    await supabase.from('sessions').insert(session)
-    await onSave()
-    onAnalyze(session, last)
-    setF(p => ({ ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6' }))
-    setSaving(false)
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div>
-        <Label>Discipline</Label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {DISCIPLINES.map(d => (
-            <button key={d} onClick={() => set('discipline', d)} style={{
-              padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
-              border: `1.5px solid ${f.discipline === d ? USERS[uid].accent : C.gray200}`,
-              background: f.discipline === d ? `${USERS[uid].accent}12` : C.white,
-              color: f.discipline === d ? USERS[uid].accent : C.gray600,
-              fontWeight: f.discipline === d ? 600 : 400, transition: 'all 0.12s',
-            }}>{ICONS[d]} {d}</button>
-          ))}
+        <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }}>Jour J</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: "#00d4ff", fontFamily: "monospace" }}>
+          J-{days}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        {[['Date','date','date',''], ['Durée (min)','duration','number','45'], ['Allure','pace','text','5:30/km'], ['FC Moy (bpm)','hr_avg','number','145'], ['FC Max (bpm)','hr_max','number','172']].map(([label, key, type, ph]) => (
-          <div key={key}>
-            <Label>{label}</Label>
-            <input type={type} value={f[key]} placeholder={ph} onChange={e => set(key, e.target.value)} style={inputStyle()} />
-          </div>
-        ))}
+function Avatar({ user, size = 36 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: `linear-gradient(135deg, ${USERS[user].color}44, ${USERS[user].color}22)`,
+      border: `2px solid ${USERS[user].color}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: size * 0.45, fontWeight: 800, color: USERS[user].color,
+    }}>{USERS[user].avatar}</div>
+  );
+}
+
+function ProgressBar({ value, max, color = "#00d4ff", height = 6 }) {
+  const pct = Math.min(100, (value / max) * 100);
+  return (
+    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height, overflow: "hidden" }}>
+      <div style={{
+        width: `${pct}%`, height: "100%", borderRadius: 99,
+        background: `linear-gradient(90deg, ${color}99, ${color})`,
+        transition: "width 0.6s cubic-bezier(.4,0,.2,1)",
+      }} />
+    </div>
+  );
+}
+
+function Card({ children, style = {} }) {
+  return (
+    <div style={{
+      background: "#1C1C1E", border: "1px solid #2C2C2E",
+      borderRadius: 16, padding: 20, ...style,
+    }}>{children}</div>
+  );
+}
+
+function Badge({ children, color = "#007AFF" }) {
+  return (
+    <span style={{
+      background: `${color}1A`, color, border: `1px solid ${color}33`,
+      borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 600,
+      letterSpacing: 0.5, display: "inline-flex", alignItems: "center", justifyContent: "center"
+    }}>{children}</span>
+  );
+}
+
+// ─── SESSION FORM ─────────────────────────────────────────────────────────────
+function SessionForm({ user, sessions, setSessions, onAnalyze }) {
+  const [form, setForm] = useState({
+    discipline: "Course à pied", date: new Date().toISOString().slice(0, 10),
+    duration: "", rpe: "6", conditions: "", notes: "",
+    distance: "", allure: "", hrAvg: "", hrMax: "",
+    nageType: "Crawl", veloType: "Route", vitesse: "", denivele: "",
+    capType: "Footing", muscuFocus: "Full body",
+    exercises: [{ name: "", sets: [{ weight: "", reps: "" }] }],
+    brick1: "Vélo", brick2: "Course à pied", transition: "", distance1: "", distance2: "",
+    recupType: "Yoga",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const updateExercise = (idx, name) => {
+    const exs = [...form.exercises]; exs[idx] = { ...exs[idx], name }; set("exercises", exs);
+  };
+  const addExercise = () => set("exercises", [...form.exercises, { name: "", sets: [{ weight: "", reps: "" }] }]);
+  const removeExercise = (idx) => set("exercises", form.exercises.filter((_, i) => i !== idx));
+  const addSet = (ei) => {
+    const exs = [...form.exercises];
+    const last = exs[ei].sets[exs[ei].sets.length - 1];
+    exs[ei] = { ...exs[ei], sets: [...exs[ei].sets, { weight: last?.weight || "", reps: last?.reps || "" }] };
+    set("exercises", exs);
+  };
+  const removeSet = (ei, si) => {
+    const exs = [...form.exercises];
+    exs[ei] = { ...exs[ei], sets: exs[ei].sets.filter((_, i) => i !== si) };
+    set("exercises", exs);
+  };
+  const updateSet = (ei, si, field, val) => {
+    const exs = [...form.exercises];
+    const sets = [...exs[ei].sets]; sets[si] = { ...sets[si], [field]: val };
+    exs[ei] = { ...exs[ei], sets }; set("exercises", exs);
+  };
+
+  const lastSame = sessions
+    .filter(s => s.user === user && s.discipline === form.discipline)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+  async function handleSubmit() {
+    if (!form.duration) return;
+    setSaving(true);
+    const session = { ...form, user, id: Date.now(), timestamp: new Date().toISOString() };
+    if (form.discipline === "Natation") session.distanceUnit = "m";
+    else if (["Vélo", "Course à pied"].includes(form.discipline)) session.distanceUnit = "km";
+    setSessions([...sessions, session]);
+    await onAnalyze(session, lastSame);
+    setSaving(false);
+    setForm(f => ({ ...f, duration: "", distance: "", allure: "", hrAvg: "", hrMax: "",
+      vitesse: "", denivele: "", notes: "", rpe: "6", conditions: "",
+      transition: "", distance1: "", distance2: "",
+      exercises: [{ name: "", sets: [{ weight: "", reps: "" }] }],
+    }));
+  }
+
+  const inp = (extra = {}) => ({
+    style: {
+      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: 8, color: "#fff", padding: "10px 14px", fontSize: 14, width: "100%",
+      outline: "none", fontFamily: "inherit", ...extra.style,
+    }, ...extra,
+  });
+  const label = (txt) => (
+    <div style={{ fontSize: 11, color: "#888", marginBottom: 6, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{txt}</div>
+  );
+
+  const disc = form.discipline;
+  const isEndurance = ["Natation", "Vélo", "Course à pied"].includes(disc);
+
+  const compDelta = lastSame && form.distance && lastSame.distance
+    ? ((parseFloat(form.distance) - parseFloat(lastSame.distance)) / parseFloat(lastSame.distance) * 100).toFixed(1)
+    : null;
+
+  return (
+    <Card>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+        <Plus size={20} /> Nouvelle séance — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div>
-          <Label>Distance</Label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="number" value={f.distance} placeholder="5" onChange={e => set('distance', e.target.value)} style={inputStyle({ flex: 1, width: 'auto' })} />
-            <select value={f.distance_unit} onChange={e => set('distance_unit', e.target.value)} style={inputStyle({ width: 62 })}><option>km</option><option>m</option></select>
+          {label("Date")}
+          <input type="date" value={form.date} onChange={e => set("date", e.target.value)} {...inp()} />
+        </div>
+        <div>
+          {label("Discipline")}
+          <select value={disc} onChange={e => set("discipline", e.target.value)} {...inp()}>
+            {DISCIPLINES.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          {label("Durée (min)")}
+          <input type="number" value={form.duration} onChange={e => set("duration", e.target.value)} placeholder="45" {...inp()} />
+        </div>
+
+        {/* ── NATATION ── */}
+        {disc === "Natation" && <>
+          <div>
+            {label("Distance (m)")}
+            <input type="number" value={form.distance} onChange={e => set("distance", e.target.value)} placeholder="750" {...inp()} />
+          </div>
+          <div>
+            {label("Allure (/100m)")}
+            <input value={form.allure} onChange={e => set("allure", e.target.value)} placeholder="2:00" {...inp()} />
+          </div>
+          <div>
+            {label("Type de nage")}
+            <select value={form.nageType} onChange={e => set("nageType", e.target.value)} {...inp()}>
+              {["Crawl", "Brasse", "Dos", "Papillon", "Mixte"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </>}
+
+        {/* ── VÉLO ── */}
+        {disc === "Vélo" && <>
+          <div>
+            {label("Distance (km)")}
+            <input type="number" value={form.distance} onChange={e => set("distance", e.target.value)} placeholder="20" {...inp()} />
+          </div>
+          <div>
+            {label("Vitesse moy (km/h)")}
+            <input type="number" value={form.vitesse} onChange={e => set("vitesse", e.target.value)} placeholder="25" {...inp()} />
+          </div>
+          <div>
+            {label("Dénivelé+ (m)")}
+            <input type="number" value={form.denivele} onChange={e => set("denivele", e.target.value)} placeholder="300" {...inp()} />
+          </div>
+          <div>
+            {label("Type")}
+            <select value={form.veloType} onChange={e => set("veloType", e.target.value)} {...inp()}>
+              {["Route", "VTT", "Home trainer", "Gravel"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </>}
+
+        {/* ── COURSE À PIED ── */}
+        {disc === "Course à pied" && <>
+          <div>
+            {label("Distance (km)")}
+            <input type="number" value={form.distance} onChange={e => set("distance", e.target.value)} placeholder="5" {...inp()} />
+          </div>
+          <div>
+            {label("Allure (/km)")}
+            <input value={form.allure} onChange={e => set("allure", e.target.value)} placeholder="5:30" {...inp()} />
+          </div>
+          <div>
+            {label("Type de sortie")}
+            <select value={form.capType} onChange={e => set("capType", e.target.value)} {...inp()}>
+              {["Footing", "Fractionné", "Sortie longue", "Côtes", "Tempo", "Récup"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </>}
+
+        {/* ── FC (endurance only) ── */}
+        {isEndurance && <>
+          <div>
+            {label("FC Moy (bpm)")}
+            <input type="number" value={form.hrAvg} onChange={e => set("hrAvg", e.target.value)} placeholder="145" {...inp()} />
+          </div>
+          <div>
+            {label("FC Max (bpm)")}
+            <input type="number" value={form.hrMax} onChange={e => set("hrMax", e.target.value)} placeholder="172" {...inp()} />
+          </div>
+        </>}
+
+        {/* ── MUSCULATION FOCUS ── */}
+        {disc === "Musculation" && <div>
+          {label("Focus")}
+          <select value={form.muscuFocus} onChange={e => set("muscuFocus", e.target.value)} {...inp()}>
+            {["Haut du corps", "Bas du corps", "Full body", "Core / Gainage"].map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>}
+
+        {/* ── BRICK ── */}
+        {disc === "Brick" && <>
+          <div>
+            {label("Discipline 1")}
+            <select value={form.brick1} onChange={e => set("brick1", e.target.value)} {...inp()}>
+              {["Natation", "Vélo", "Course à pied"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            {label("Discipline 2")}
+            <select value={form.brick2} onChange={e => set("brick2", e.target.value)} {...inp()}>
+              {["Natation", "Vélo", "Course à pied"].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            {label("Distance 1")}
+            <input type="number" value={form.distance1} onChange={e => set("distance1", e.target.value)} placeholder="20" {...inp()} />
+          </div>
+          <div>
+            {label("Distance 2")}
+            <input type="number" value={form.distance2} onChange={e => set("distance2", e.target.value)} placeholder="5" {...inp()} />
+          </div>
+          <div>
+            {label("Transition (sec)")}
+            <input type="number" value={form.transition} onChange={e => set("transition", e.target.value)} placeholder="60" {...inp()} />
+          </div>
+        </>}
+
+        {/* ── RÉCUP ── */}
+        {disc === "Récupération active" && <div>
+          {label("Type d'activité")}
+          <select value={form.recupType} onChange={e => set("recupType", e.target.value)} {...inp()}>
+            {["Yoga", "Marche", "Étirements", "Foam rolling", "Mobilité", "Natation légère"].map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>}
+
+        {/* ── RPE (always) ── */}
+        <div>
+          {label("RPE (1–10)")}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input type="range" min="1" max="10" value={form.rpe} onChange={e => set("rpe", e.target.value)}
+              style={{ flex: 1, accentColor: USERS[user].color }} />
+            <span style={{ color: USERS[user].color, fontWeight: 800, width: 20 }}>{form.rpe}</span>
           </div>
         </div>
-      </div>
 
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Label>Effort perçu (RPE)</Label>
-          <span style={{ fontSize: 15, fontWeight: 700, color: USERS[uid].accent }}>{f.rpe}<span style={{ fontSize: 12, color: C.gray400, fontWeight: 400 }}>/10</span></span>
+        <div style={{ gridColumn: "1/-1" }}>
+          {label("Conditions")}
+          <input value={form.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Ex: piste, 18°C, vent faible" {...inp()} />
         </div>
-        <input type="range" min="1" max="10" value={f.rpe} onChange={e => set('rpe', e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.gray400, marginTop: 5 }}>
-          <span>Très facile</span><span>Modéré</span><span>Maximum</span>
+        <div style={{ gridColumn: "1/-1" }}>
+          {label("Notes libres")}
+          <textarea value={form.notes} onChange={e => set("notes", e.target.value)}
+            placeholder="Ressenti, points à améliorer..." rows={3}
+            style={{ ...inp().style, resize: "vertical" }} />
         </div>
       </div>
 
-      <div>
-        <Label>Notes</Label>
-        <textarea value={f.notes} onChange={e => set('notes', e.target.value)} placeholder="Ressenti, observations..." rows={3} style={{ ...inputStyle(), resize: 'vertical' }} />
-      </div>
-
-      {last && (
-        <div style={{ padding: '14px 16px', background: C.bg, borderRadius: 10, border: `1px solid ${C.gray100}` }}>
-          <Label>Dernière {f.discipline} — {last.date}</Label>
-          <div style={{ display: 'flex', gap: 20, fontSize: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span><span style={{ color: C.gray400 }}>Durée </span><strong>{last.duration}min</strong></span>
-            {last.distance && <span><span style={{ color: C.gray400 }}>Distance </span><strong>{last.distance}{last.distance_unit}</strong></span>}
-            {delta !== null && <span style={{ fontWeight: 700, color: +delta >= 0 ? '#22c55e' : '#ef4444' }}>{+delta >= 0 ? '+' : ''}{delta}%</span>}
-          </div>
+      {/* ── MUSCULATION EXERCISES ── */}
+      {disc === "Musculation" && (
+        <div style={{ marginTop: 16 }}>
+          <datalist id="exo-suggestions">
+            {EXERCISE_SUGGESTIONS.map(e => <option key={e} value={e} />)}
+          </datalist>
+          {form.exercises.map((ex, ei) => (
+            <div key={ei} style={{
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 12, padding: 14, marginBottom: 10,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: USERS[user].color }}>💪 Exercice {ei + 1}</span>
+                {form.exercises.length > 1 && (
+                  <button onClick={() => removeExercise(ei)} style={{
+                    background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.3)",
+                    borderRadius: 6, color: "#f87171", cursor: "pointer", padding: "2px 8px", fontSize: 12, fontFamily: "inherit",
+                  }}>✕</button>
+                )}
+              </div>
+              <input list="exo-suggestions" value={ex.name} onChange={e => updateExercise(ei, e.target.value)}
+                placeholder="Nom de l'exercice" {...inp({ style: { marginBottom: 10, width: "100%" } })} />
+              {ex.sets.map((s, si) => (
+                <div key={si} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: "#666", fontFamily: "monospace", minWidth: 24 }}>S{si + 1}</span>
+                  <input type="number" value={s.weight} onChange={e => updateSet(ei, si, "weight", e.target.value)}
+                    placeholder="kg" {...inp({ style: { width: 70, padding: "7px 10px", fontSize: 13 } })} />
+                  <span style={{ color: "#555", fontSize: 13 }}>kg ×</span>
+                  <input type="number" value={s.reps} onChange={e => updateSet(ei, si, "reps", e.target.value)}
+                    placeholder="reps" {...inp({ style: { width: 70, padding: "7px 10px", fontSize: 13 } })} />
+                  <span style={{ color: "#555", fontSize: 13 }}>reps</span>
+                  {ex.sets.length > 1 && (
+                    <button onClick={() => removeSet(ei, si)} style={{
+                      background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, padding: "0 4px",
+                    }}>✕</button>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => addSet(ei)} style={{
+                background: "rgba(255,255,255,0.05)", border: "1px dashed rgba(255,255,255,0.15)",
+                borderRadius: 6, color: "#888", cursor: "pointer", padding: "5px 12px", fontSize: 12,
+                fontFamily: "inherit", marginTop: 4, width: "100%",
+              }}>+ Série</button>
+            </div>
+          ))}
+          <button onClick={addExercise} style={{
+            background: `${USERS[user].color}15`, border: `1px dashed ${USERS[user].color}44`,
+            borderRadius: 10, color: USERS[user].color, cursor: "pointer", padding: "10px 0", fontSize: 13,
+            fontWeight: 600, fontFamily: "inherit", width: "100%",
+          }}>+ Ajouter un exercice</button>
         </div>
       )}
 
-      <button onClick={submit} disabled={saving || !f.duration} style={{
-        width: '100%', padding: 14, borderRadius: 12, border: 'none',
-        background: saving || !f.duration ? C.gray100 : USERS[uid].accent,
-        color: saving || !f.duration ? C.gray400 : '#fff',
-        fontSize: 15, fontWeight: 600, cursor: saving || !f.duration ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-      }}>
-        {saving ? 'Enregistrement...' : 'Enregistrer la séance'}
+      {lastSame && (
+        <div style={{
+          marginTop: 14, padding: "12px 16px", background: "rgba(255,255,255,0.04)",
+          borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13,
+        }}>
+          <span style={{ color: "#888" }}>Dernière {form.discipline} :</span>
+          <span>⏱ {lastSame.duration} min</span>
+          {lastSame.distance && <span>📏 {lastSame.distance}{lastSame.distanceUnit}</span>}
+          {lastSame.allure && <span>⚡ {lastSame.allure}</span>}
+          {lastSame.exercises && <span>💪 {lastSame.exercises.length} exos</span>}
+          {compDelta !== null && (
+            <span style={{ color: parseFloat(compDelta) >= 0 ? "#4ade80" : "#f87171", fontWeight: 700 }}>
+              {parseFloat(compDelta) >= 0 ? "▲" : "▼"} {Math.abs(compDelta)}%
+            </span>
+          )}
+        </div>
+      )}
+
+      <button onClick={handleSubmit} disabled={saving || !form.duration}
+        style={{
+          marginTop: 16, width: "100%", padding: "13px 0", borderRadius: 10, border: "none",
+          background: saving ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`,
+          color: saving ? "#888" : "#000", fontWeight: 800, fontSize: 15, cursor: saving ? "not-allowed" : "pointer",
+          fontFamily: "inherit", transition: "all 0.2s",
+        }}>
+        {saving ? "⏳ Analyse en cours..." : "✅ Enregistrer la séance"}
       </button>
-    </div>
-  )
+    </Card>
+  );
 }
 
-function DuelView({ sessions }) {
-  const cutoff = sevenDaysAgo()
-  const week = sessions.filter(s => new Date(s.date) >= cutoff)
-  const stat = uid => {
-    const u = week.filter(s => s.user_id === uid)
-    return { count: u.length, minutes: u.reduce((a, s) => a + (s.duration || 0), 0), byDisc: DISCIPLINES.reduce((acc, d) => { acc[d] = u.filter(s => s.discipline === d).reduce((a, s) => a + (s.duration || 0), 0); return acc }, {}) }
+// ─── WELLNESS FORM ────────────────────────────────────────────────────────────
+function WellnessForm({ user, wellness, setWellness }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayEntry = wellness.find(w => w.user === user && w.date === today);
+  const [sleep, setSleep] = useState(todayEntry?.sleep || 3);
+  const [fatigue, setFatigue] = useState(todayEntry?.fatigue || 3);
+  const [mood, setMood] = useState(todayEntry?.mood || 3);
+  const [saved, setSaved] = useState(!!todayEntry);
+
+  function save() {
+    const entry = { user, date: today, sleep, fatigue, mood };
+    setWellness(prev => [...prev.filter(w => !(w.user === user && w.date === today)), entry]);
+    setSaved(true);
   }
-  const ls = stat('louis'), rs = stat('romain')
-  const activeDiscs = DISCIPLINES.filter(d => ls.byDisc[d] + rs.byDisc[d] > 0)
+
+  const Slider = ({ label, val, setVal }) => (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, color: "#888", letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{label}</span>
+      </div>
+      <input type="range" min="1" max="5" value={val} onChange={e => { setVal(+e.target.value); setSaved(false); }}
+        style={{ width: "100%", accentColor: USERS[user].color }} />
+    </div>
+  );
+
+  const score = ((sleep + (6 - fatigue) + mood) / 13 * 100).toFixed(0);
 
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
-        {['louis', 'romain'].map(uid => {
-          const st = uid === 'louis' ? ls : rs
-          const winning = st.minutes > (uid === 'louis' ? rs : ls).minutes
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span><Heart size={18} color="#34C759" fill="#34C759" /> Check-in du matin — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span></span>
+        <Badge color={score >= 70 ? "#4ade80" : score >= 40 ? "#fbbf24" : "#f87171"}>Score {score}%</Badge>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <Slider label="Sommeil" val={sleep} setVal={setSleep} />
+        <Slider label="Fatigue" val={6 - fatigue} setVal={v => setFatigue(6 - v)} />
+        <Slider label="Humeur" val={mood} setVal={setMood} />
+      </div>
+      <button onClick={save} disabled={saved}
+        style={{
+          marginTop: 14, width: "100%", padding: "11px 0", borderRadius: 8, border: "none",
+          background: saved ? "rgba(74,222,128,0.15)" : `linear-gradient(135deg, ${USERS[user].color}99, ${USERS[user].color})`,
+          color: saved ? "#4ade80" : "#000", fontWeight: 700, cursor: saved ? "default" : "pointer",
+          fontFamily: "inherit", fontSize: 14,
+        }}>
+        {saved ? <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Check size={18} /> Check-in enregistré</span> : "Enregistrer"}
+      </button>
+    </Card>
+  );
+}
+
+// ─── MILESTONES ───────────────────────────────────────────────────────────────
+function Milestones({ user, sessions }) {
+  return (
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+        <Trophy size={18} /> Milestones — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {Object.entries(MILESTONES).map(([disc, m]) => {
+          const best = sessions
+            .filter(s => s.user === user && s.discipline === disc && s.distance)
+            .reduce((max, s) => Math.max(max, parseFloat(s.distance) * (s.distanceUnit === "m" ? 0.001 : 1)), 0);
+          const pct = Math.min(100, (best / m.target) * 100);
+          const done = pct >= 100;
           return (
-            <div key={uid} style={{ padding: '20px 16px', background: winning ? `${USERS[uid].accent}08` : C.bg, borderRadius: 14, border: `1.5px solid ${winning ? USERS[uid].accent + '44' : C.gray200}`, textAlign: 'center' }}>
-              <Avatar uid={uid} size={42} />
-              <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10 }}>{USERS[uid].name}</div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: USERS[uid].accent, marginTop: 6, letterSpacing: -1 }}>{st.count}</div>
-              <div style={{ fontSize: 11, color: C.gray400, marginBottom: 8 }}>séances</div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{Math.floor(st.minutes / 60)}h{String(st.minutes % 60).padStart(2, '0')}</div>
-              {winning && st.minutes > 0 && <div style={{ marginTop: 8 }}><Tag color={USERS[uid].accent}>En tête</Tag></div>}
+            <div key={disc}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>{m.icon} {m.label}</span>
+                <span style={{ color: done ? "#4ade80" : USERS[user].color, fontWeight: 700 }}>
+                  {done ? "🏆 Atteint !" : `${best.toFixed(1)}/${m.target}${m.unit}`}
+                </span>
+              </div>
+              <ProgressBar value={best} max={m.target} color={done ? "#4ade80" : USERS[user].color} />
             </div>
-          )
+          );
         })}
       </div>
-      {activeDiscs.length > 0 ? (
-        <div>
-          <Label>Par discipline — 7 derniers jours</Label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
-            {activeDiscs.map(d => {
-              const lm = ls.byDisc[d], rm = rs.byDisc[d], tot = lm + rm
-              const lpct = tot ? (lm / tot) * 100 : 50
-              return (
-                <div key={d}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 8 }}>
-                    <span style={{ color: USERS.louis.accent, fontWeight: 600 }}>{lm}min</span>
-                    <span style={{ color: C.gray500 }}>{ICONS[d]} {d}</span>
-                    <span style={{ color: USERS.romain.accent, fontWeight: 600 }}>{rm}min</span>
-                  </div>
-                  <div style={{ height: 5, background: C.gray100, borderRadius: 99, overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${lpct}%`, background: USERS.louis.accent }} />
-                    <div style={{ flex: 1, background: USERS.romain.accent }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ) : (
-        <div style={{ textAlign: 'center', color: C.gray400, fontSize: 14, padding: '20px 0' }}>Aucune séance cette semaine</div>
-      )}
-    </div>
-  )
+    </Card>
+  );
 }
 
-function PlanView({ uid }) {
+// ─── DUEL DASHBOARD ───────────────────────────────────────────────────────────
+function DuelDashboard({ sessions, wellness }) {
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekSessions = sessions.filter(s => new Date(s.date) >= weekStart);
+
+  const stats = (uid) => {
+    const userW = weekSessions.filter(s => s.user === uid);
+    const byDisc = {};
+    DISCIPLINES.forEach(d => {
+      const disc = userW.filter(s => s.discipline === d);
+      byDisc[d] = { count: disc.length, minutes: disc.reduce((a, s) => a + (+s.duration || 0), 0) };
+    });
+    return byDisc;
+  };
+
+  const ls = stats("louis");
+  const rs = stats("romain");
+
   return (
-    <div>
-      {PLAN[uid].map((p, i) => (
-        <div key={p.phase} style={{ display: 'flex', gap: 16, padding: '20px 0', borderBottom: i < PLAN[uid].length - 1 ? `1px solid ${C.gray100}` : 'none' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 28 }}>
-            <div style={{ width: 26, height: 26, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-            {i < PLAN[uid].length - 1 && <div style={{ width: 1, flex: 1, background: C.gray100, marginTop: 8 }} />}
-          </div>
-          <div style={{ flex: 1, paddingBottom: i < PLAN[uid].length - 1 ? 8 : 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>{p.phase}</div>
-            <div style={{ fontSize: 12, color: USERS[uid].accent, fontWeight: 500, marginTop: 2 }}>{p.period}</div>
-            <div style={{ fontSize: 13, color: C.gray500, marginTop: 6, lineHeight: 1.6 }}>{p.detail}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+        <Avatar user="louis" size={28} />
+        <span style={{ color: USERS.louis.color }}>Louis</span>
+        <span style={{ flex: 1, textAlign: "center", color: "#555" }}>VS</span>
+        <span style={{ color: USERS.romain.color }}>Romain</span>
+        <Avatar user="romain" size={28} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {DISCIPLINES.slice(0, 4).map(d => {
+          const lm = ls[d].minutes, rm = rs[d].minutes;
+          const total = lm + rm;
+          const lpct = total ? (lm / total) * 100 : 50;
+          const winner = lm > rm ? "louis" : rm > lm ? "romain" : null;
+          return (
+            <div key={d}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, color: "#aaa" }}>
+                <span style={{ color: USERS.louis.color }}>{lm}min</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{getDiscIcon(d, 16)} {d} {winner && <span style={{ color: USERS[winner].color }}>←</span>}</span>
+                <span style={{ color: USERS.romain.color }}>{rm}min</span>
+              </div>
+              <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", display: "flex" }}>
+                <div style={{ width: `${lpct}%`, background: USERS.louis.color, transition: "width 0.5s" }} />
+                <div style={{ flex: 1, background: USERS.romain.color }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {["louis", "romain"].map(uid => {
+          const total = weekSessions.filter(s => s.user === uid).length;
+          const avgRpe = weekSessions.filter(s => s.user === uid && s.rpe).reduce((a, s, _, arr) => a + +s.rpe / arr.length, 0);
+          return (
+            <div key={uid} style={{
+              padding: "12px", background: `${USERS[uid].color}0a`,
+              border: `1px solid ${USERS[uid].color}22`, borderRadius: 10, textAlign: "center",
+            }}>
+              <Avatar user={uid} size={32} />
+              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, color: USERS[uid].color }}>{total}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>séances cette semaine</div>
+              {avgRpe > 0 && <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>RPE moyen {avgRpe.toFixed(1)}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
-// ─── CHAT ────────────────────────────────────────────────────────────────────
-function ChatView({ uid, sessions, wellness }) {
-  const [msgs, setMsgs] = useState([{ role: 'assistant', content: `Bonjour ${USERS[uid].name} 👋\n\nJe suis ton coach. Pose-moi n'importe quelle question sur ton entraînement, ta nutrition ou ta récupération.` }])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const bottomRef = useRef()
-  const inputRef = useRef()
+// ─── SESSION HISTORY ─────────────────────────────────────────────────────────
+function SessionHistory({ user, sessions, setSessions }) {
+  const userSessions = sessions.filter(s => s.user === user).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+  const startEdit = (s) => { setEditForm({ ...s }); setEditing(s.id); };
+  const saveEdit = () => {
+    setSessions(sessions.map(s => s.id === editing ? { ...s, ...editForm } : s));
+    setEditing(null);
+  };
+  const deleteSession = (id) => {
+    if (window.confirm("Supprimer cette séance ?")) setSessions(sessions.filter(s => s.id !== id));
+  };
+  const ef = (k, v) => setEditForm(f => ({ ...f, [k]: v }));
 
-  async function send(text) {
-    const txt = (text || input).trim()
-    if (!txt || loading) return
-    setInput(''); setError(null)
-    setMsgs(p => [...p, { role: 'user', content: txt }])
-    setLoading(true)
-    try {
-      const history = msgs.map(m => ({ role: m.role, content: m.content }))
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [...history, { role: 'user', content: txt }])
-      setMsgs(p => [...p, { role: 'assistant', content: reply }])
-    } catch (e) {
-      setError('Impossible de contacter le coach. Vérifie ta connexion.')
-      setMsgs(p => p.slice(0, -1))
+  const detail = (s) => {
+    if (s.discipline === "Musculation" && s.exercises) {
+      const totalSets = s.exercises.reduce((a, e) => a + (e.sets?.length || 0), 0);
+      return `${s.exercises.filter(e => e.name).length} exos · ${totalSets} séries`;
     }
-    setLoading(false)
-    setTimeout(() => inputRef.current?.focus(), 100)
+    if (s.discipline === "Vélo" && s.vitesse) return `${s.distance || "—"}km · ${s.vitesse}km/h`;
+    if (s.distance) return `${s.distance}${s.distanceUnit || ""}${s.allure ? " · " + s.allure : ""}`;
+    if (s.discipline === "Récupération active") return s.recupType || "";
+    return "";
+  };
+  const subType = (s) => {
+    if (s.nageType && s.discipline === "Natation") return s.nageType;
+    if (s.veloType && s.discipline === "Vélo") return s.veloType;
+    if (s.capType && s.discipline === "Course à pied") return s.capType;
+    if (s.muscuFocus && s.discipline === "Musculation") return s.muscuFocus;
+    if (s.discipline === "Brick") return `${s.brick1} + ${s.brick2}`;
+    return null;
+  };
+
+  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+
+  return (
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <FileText size={18} /> Historique — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+      {userSessions.length === 0 && <div style={{ color: "#555", fontSize: 14 }}>Aucune séance enregistrée.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {userSessions.map(s => (
+          <div key={s.id} style={{
+            display: "flex", gap: 10, alignItems: "center",
+            padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 10, fontSize: 13,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "rgba(255,255,255,0.05)", borderRadius: 12, color: USERS[user].color }}>
+              {getDiscIcon(s.discipline, 20)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{s.discipline}</div>
+              <div style={{ color: "#888", fontSize: 11 }}>{s.date}{subType(s) ? ` · ${subType(s)}` : ""}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontWeight: 700 }}>{s.duration} min</div>
+              {detail(s) && <div style={{ color: "#888", fontSize: 11 }}>{detail(s)}</div>}
+            </div>
+            <Badge color={USERS[user].color}>RPE {s.rpe}</Badge>
+            <button onClick={() => startEdit(s)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }}>✏️</button>
+            <button onClick={() => deleteSession(s.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }}>🗑️</button>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+            padding: 24, maxWidth: 420, width: "100%" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <Edit2 size={18} /> Modifier la séance
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DATE</div>
+                <input type="date" value={editForm.date || ""} onChange={e => ef("date", e.target.value)} style={inp} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DURÉE (MIN)</div>
+                <input type="number" value={editForm.duration || ""} onChange={e => ef("duration", e.target.value)} style={inp} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DISTANCE</div>
+                <input type="number" value={editForm.distance || ""} onChange={e => ef("distance", e.target.value)} style={inp} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>RPE</div>
+                <input type="number" min="1" max="10" value={editForm.rpe || ""} onChange={e => ef("rpe", e.target.value)} style={inp} />
+              </div>
+              <div style={{ gridColumn: "1/-1" }}>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>NOTES</div>
+                <textarea value={editForm.notes || ""} onChange={e => ef("notes", e.target.value)} rows={2}
+                  style={{ ...inp, resize: "vertical" }} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={() => setEditing(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#888",
+                cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>Annuler</button>
+              <button onClick={saveEdit} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
+                background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`,
+                color: "#000", cursor: "pointer", fontFamily: "inherit", fontWeight: 700 }}>Sauvegarder</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── AI CHAT ─────────────────────────────────────────────────────────────────
+function AIChat({ user, sessions, wellness }) {
+  const [messages, setMessages] = useState([{
+    role: "assistant",
+    content: `Salut ${USERS[user].name} ! 👋 Je suis ton coach IA. J'ai accès à tout ton historique. Pose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...`,
+  }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef();
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  async function send() {
+    if (!input.trim() || loading) return;
+    const userMsg = input.trim();
+    setInput("");
+    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    setLoading(true);
+
+    const history = messages.slice(1).map(m => ({ role: m.role, content: m.content }));
+    const sys = buildCoachPrompt(user, sessions, wellness);
+    try {
+      const reply = await callClaude(sys, userMsg, history);
+      setMessages(prev => [...prev, { role: "assistant", content: reply }]);
+    } catch {
+      setMessages(prev => [...prev, { role: "assistant", content: "Erreur de connexion à l'IA. Vérifie ta connexion." }]);
+    }
+    setLoading(false);
   }
 
-  const suggestions = ['Analyse ma semaine', 'Que manger demain ?', 'Je suis épuisé', 'Programme du jour']
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100svh - 158px)', minHeight: 400 }}>
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 12 }}>
-        {msgs.map((m, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-            {m.role === 'assistant'
-              ? <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.gray100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>🤖</div>
-              : <Avatar uid={uid} size={30} />}
-            <div style={{
-              maxWidth: '78%', padding: '12px 15px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap',
-              background: m.role === 'user' ? USERS[uid].accent : C.bg,
-              color: m.role === 'user' ? '#fff' : C.black,
-              borderRadius: m.role === 'user' ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-            }}>{m.content}</div>
+    <Card style={{ display: "flex", flexDirection: "column", height: 480 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <Bot size={20} /> Coach IA — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingRight: 4 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+            maxWidth: "85%",
+            background: m.role === "user"
+              ? `linear-gradient(135deg, ${USERS[user].color}33, ${USERS[user].color}22)`
+              : "rgba(255,255,255,0.05)",
+            border: `1px solid ${m.role === "user" ? USERS[user].color + "44" : "rgba(255,255,255,0.08)"}`,
+            borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+            padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap",
+          }}>
+            {m.content}
           </div>
         ))}
         {loading && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.gray100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
-            <div style={{ padding: '12px 16px', background: C.bg, borderRadius: '4px 18px 18px 18px', display: 'flex', gap: 5 }}>
-              {[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: C.gray400, animation: `pulse 1.4s ${i * 0.18}s ease-in-out infinite` }} />)}
-            </div>
+          <div style={{ alignSelf: "flex-start", padding: "10px 14px", background: "rgba(255,255,255,0.05)", borderRadius: 16, fontSize: 13, color: "#8E8E93", display: "flex", alignItems: "center", gap: 8 }}>
+            <Loader2 size={16} className="animate-spin" /> Le coach analyse...
           </div>
         )}
-        {error && <div style={{ fontSize: 13, color: '#ef4444', textAlign: 'center', padding: '8px 0' }}>{error}</div>}
         <div ref={bottomRef} />
       </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <input
+          value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && send()}
+          placeholder="Pose ta question..."
+          style={{
+            flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 10, color: "#fff", padding: "10px 14px", fontSize: 14, outline: "none", fontFamily: "inherit",
+          }}
+        />
+        <button onClick={send} disabled={loading || !input.trim()}
+          style={{
+            padding: "10px 18px", borderRadius: 10, border: "none", fontWeight: 700, fontSize: 14,
+            background: loading || !input.trim() ? "rgba(255,255,255,0.08)" : `linear-gradient(135deg, ${USERS[user].color}99, ${USERS[user].color})`,
+            color: loading || !input.trim() ? "#555" : "#000", cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          }}>↑</button>
+      </div>
+    </Card>
+  );
+}
 
-      {msgs.length === 1 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          {suggestions.map(s => (
-            <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${C.gray200}`, background: C.white, color: C.gray800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>
+// ─── AI ANALYSIS POPUP ────────────────────────────────────────────────────────
+function AIAnalysisPopup({ analysis, onClose }) {
+  if (!analysis) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }}>
+      <div style={{
+        background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+        padding: 28, maxWidth: 500, width: "100%", position: "relative",
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <Bot size={20} /> Analyse du coach IA
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.7, color: "#ddd", whiteSpace: "pre-wrap" }}>{analysis}</div>
+        <button onClick={onClose} style={{
+          marginTop: 20, width: "100%", padding: "11px 0", borderRadius: 10, border: "none",
+          background: "rgba(255,255,255,0.1)", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>Fermer</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── MINI STATS ───────────────────────────────────────────────────────────────
+function MiniStats({ user, sessions, wellness }) {
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekSess = sessions.filter(s => s.user === user && new Date(s.date) >= weekStart);
+  const totalMin = weekSess.reduce((a, s) => a + (+s.duration || 0), 0);
+  const todayWell = wellness.filter(w => w.user === user).sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  const wellScore = todayWell
+    ? Math.round((todayWell.sleep + (6 - todayWell.fatigue) + todayWell.mood) / 13 * 100)
+    : null;
+
+  const stats = [
+    { label: "Séances / sem", val: weekSess.length, icon: <Calendar size={20} color="#8E8E93" /> },
+    { label: "Volume", val: `${Math.round(totalMin / 60)}h${totalMin % 60}`, icon: <Clock size={20} color="#8E8E93" /> },
+    { label: "Bien-être", val: wellScore !== null ? `${wellScore}%` : "—", icon: <Heart size={20} color="#8E8E93" /> },
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+      {stats.map(s => (
+        <div key={s.label} style={{
+          background: "#1C1C1E", border: "1px solid #2C2C2E",
+          borderRadius: 16, padding: "16px 12px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
+        }}>
+          <div style={{ marginBottom: 6 }}>{s.icon}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: USERS[user].color }}>{s.val}</div>
+          <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── TRAINING PLAN ────────────────────────────────────────────────────────────
+const PLAN = {
+  louis: [
+    { phase: "Fondation", weeks: "1–4", desc: "3 séances/sem (Nat+Vélo+CAP). Musculation 2x/sem axée gainage et force fonctionnelle. Volumes bas, intensité basse. RPE 5–6." },
+    { phase: "Développement", weeks: "5–12", desc: "4 séances/sem. Introduire les bricks. Musculation 1x/sem. Augmentation volume 10%/sem avec semaines de récup S4/S8." },
+    { phase: "Spécifique", weeks: "13–20", desc: "5 séances/sem. Bricks réguliers. Musculation 0–1x/sem (gainage uniquement). Travailler aux allures cibles." },
+    { phase: "Affûtage", weeks: "21–24", desc: "Réduction volume de 30–40%. Intensité maintenue. Focus récupération. Simulation de course en semaine 23." },
+  ],
+  romain: [
+    { phase: "Fondation", weeks: "1–6", desc: "2 séances/sem (Nat+CAP ou Vélo). Volumes très bas. Priorité : courir 20min sans s'arrêter et nager 200m. RPE 4–5." },
+    { phase: "Développement", weeks: "7–14", desc: "3 séances/sem. Introduire le vélo. Augmentation progressive. Premiers bricks courts en fin de bloc." },
+    { phase: "Spécifique", weeks: "15–20", desc: "4 séances/sem. Bricks. Atteindre les distances cibles sur chaque discipline séparément." },
+    { phase: "Affûtage", weeks: "21–24", desc: "Réduction volume. Confiance et récupération. Simulation de course complète en semaine 23." },
+  ],
+};
+
+function TrainingPlan({ user, sessions, wellness }) {
+  const plan = PLAN[user];
+  const colors = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981"];
+
+  const [dynamicPlan, setDynamicPlan] = useStorage(`tri_dynamic_plan_${user}`, null);
+  const [loading, setLoading] = useState(false);
+
+  const generatePlan = async () => {
+    setLoading(true);
+    const sys = buildCoachPrompt(user, sessions, wellness);
+    const msg = `Génère un plan d'entraînement d'UNE SEMAINE pour moi.
+Format exigé (Texte brut, un jour par ligne, sans markdown ni gras) :
+Lundi : [Séance]
+Mardi : [Séance]
+etc.
+Si repos, écris "Repos". Sois précis sur les durées et allures. Prends en compte ma fatigue actuelle.`;
+
+    try {
+      const reply = await callClaude(sys, msg);
+      setDynamicPlan({ date: new Date().toLocaleDateString(), content: reply });
+    } catch(e) {
+      alert("Erreur de génération du plan");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Card>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <CalendarDays size={18} /> Macro-Plan — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {plan.map((p, i) => (
+            <div key={p.phase} style={{
+              padding: "12px 14px", background: `${colors[i]}0d`,
+              border: `1px solid ${colors[i]}33`, borderRadius: 10,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, color: colors[i] }}>{p.phase}</span>
+                <Badge color={colors[i]}>Semaines {p.weeks}</Badge>
+              </div>
+              <div style={{ fontSize: 13, color: "#bbb", lineHeight: 1.5 }}>{p.desc}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+            <Bot size={18} /> Ma Semaine IA
+          </div>
+          <button onClick={generatePlan} disabled={loading} style={{
+            background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`,
+            border: "none", borderRadius: 8, padding: "6px 12px", color: "#000", fontWeight: 700,
+            cursor: loading ? "not-allowed" : "pointer", fontSize: 12, fontFamily: "inherit"
+          }}>
+            {loading ? "Génération..." : "Générer ma semaine"}
+          </button>
+        </div>
+
+        {dynamicPlan ? (
+          <div>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 12 }}>Généré le {dynamicPlan.date}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {dynamicPlan.content.split('\n').filter(l => l.trim()).map((line, i) => {
+                const parts = line.split(':');
+                const day = parts[0];
+                const rest = parts.slice(1).join(':');
+                if (!rest) return <div key={i} style={{ color: "#ddd", fontSize: 13 }}>{line}</div>;
+                return (
+                  <div key={i} style={{ padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 13 }}>
+                    <span style={{ fontWeight: 700, color: USERS[user].color, width: 70, display: "inline-block" }}>{day}</span>
+                    <span style={{ color: "#ddd" }}>{rest}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: "#666", fontSize: 13, textAlign: "center", padding: "10px 0" }}>
+            Aucun plan généré pour le moment.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ─── PERSONAL RECORDS ────────────────────────────────────────────────────────
+function PersonalRecords({ user, sessions }) {
+  const us = sessions.filter(s => s.user === user);
+  const bestDist = (disc, unit) => {
+    const vals = us.filter(s => s.discipline === disc && s.distance).map(s => parseFloat(s.distance));
+    return vals.length ? `${Math.max(...vals)}${unit}` : "—";
+  };
+  const bestAllure = (disc) => {
+    const vals = us.filter(s => s.discipline === disc && s.allure).map(s => s.allure);
+    return vals.length ? vals.sort()[0] : "—";
+  };
+  const bestVitesse = () => {
+    const vals = us.filter(s => s.discipline === "Vélo" && s.vitesse).map(s => parseFloat(s.vitesse));
+    return vals.length ? `${Math.max(...vals)} km/h` : "—";
+  };
+  // Max weight per exercise
+  const muscuSessions = us.filter(s => s.discipline === "Musculation" && s.exercises);
+  const maxWeights = {};
+  muscuSessions.forEach(s => {
+    s.exercises.forEach(e => {
+      if (!e.name) return;
+      const maxW = Math.max(...(e.sets || []).map(st => parseFloat(st.weight) || 0));
+      if (maxW > (maxWeights[e.name] || 0)) maxWeights[e.name] = maxW;
+    });
+  });
+  const topExos = Object.entries(maxWeights).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const records = [
+    { icon: getDiscIcon("Natation", 24), label: "Natation", val: bestDist("Natation", "m"), sub: bestAllure("Natation") !== "—" ? `Allure: ${bestAllure("Natation")}` : "" },
+    { icon: getDiscIcon("Vélo", 24), label: "Vélo", val: bestDist("Vélo", "km"), sub: bestVitesse() !== "—" ? bestVitesse() : "" },
+    { icon: getDiscIcon("Course à pied", 24), label: "Course", val: bestDist("Course à pied", "km"), sub: bestAllure("Course à pied") !== "—" ? `Allure: ${bestAllure("Course à pied")}` : "" },
+  ];
+
+  return (
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <Trophy size={18} /> Records — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+        {records.map(r => (
+          <div key={r.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20 }}>{r.icon}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: USERS[user].color, marginTop: 4 }}>{r.val}</div>
+            <div style={{ fontSize: 10, color: "#888" }}>{r.label}</div>
+            {r.sub && <div style={{ fontSize: 9, color: "#666", marginTop: 2 }}>{r.sub}</div>}
+          </div>
+        ))}
+      </div>
+      {topExos.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, color: "#8E8E93", marginBottom: 6, fontWeight: 600, letterSpacing: 1, display: "flex", alignItems: "center", gap: 4 }}>
+            <Dumbbell size={14} /> MAX CHARGES
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {topExos.map(([name, w]) => (
+              <span key={name} style={{ background: `${USERS[user].color}15`, border: `1px solid ${USERS[user].color}33`,
+                borderRadius: 8, padding: "4px 10px", fontSize: 12 }}>
+                {name}: <span style={{ fontWeight: 700, color: USERS[user].color }}>{w}kg</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── STREAKS & GAMIFICATION ──────────────────────────────────────────────────
+function Streaks({ user, sessions }) {
+  const us = sessions.filter(s => s.user === user).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const dates = [...new Set(us.map(s => s.date))].sort((a, b) => new Date(b) - new Date(a));
+
+  // Current streak
+  let streak = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  let checkDate = new Date(today);
+  for (let i = 0; i < 365; i++) {
+    const d = checkDate.toISOString().slice(0, 10);
+    if (dates.includes(d)) { streak++; checkDate.setDate(checkDate.getDate() - 1); }
+    else if (i === 0) { checkDate.setDate(checkDate.getDate() - 1); } // allow today not done yet
+    else break;
+  }
+
+  // Best streak ever
+  let bestStreak = 0, cur = 0;
+  const allDates = [...dates].sort();
+  for (let i = 0; i < allDates.length; i++) {
+    if (i === 0) { cur = 1; } else {
+      const diff = (new Date(allDates[i]) - new Date(allDates[i - 1])) / 86400000;
+      cur = diff === 1 ? cur + 1 : 1;
+    }
+    bestStreak = Math.max(bestStreak, cur);
+  }
+
+  const total = us.length;
+  const totalMin = us.reduce((a, s) => a + (+s.duration || 0), 0);
+
+  // Badges
+  const badges = [];
+  if (streak >= 7) badges.push({ icon: <Flame size={14} color="#FF9500" />, label: "7j streak" });
+  if (streak >= 30) badges.push({ icon: <Trophy size={14} color="#AF52DE" />, label: "30j streak" });
+  if (total >= 10) badges.push({ icon: <Medal size={14} color="#FFD60A" />, label: "10 séances" });
+  if (total >= 50) badges.push({ icon: <Medal size={14} color="#FF3B30" />, label: "50 séances" });
+  if (us.some(s => s.discipline === "Course à pied" && parseFloat(s.distance) >= 5)) badges.push({ icon: <Footprints size={14} color="#007AFF" />, label: "5km ✓" });
+  if (us.some(s => s.discipline === "Natation" && parseFloat(s.distance) >= 750)) badges.push({ icon: <Waves size={14} color="#34C759" />, label: "750m ✓" });
+  if (us.some(s => s.discipline === "Vélo" && parseFloat(s.distance) >= 20)) badges.push({ icon: <Bike size={14} color="#FF9500" />, label: "20km ✓" });
+  if (us.some(s => s.discipline === "Brick")) badges.push({ icon: <Zap size={14} color="#FFD60A" />, label: "1er Brick" });
+  if (totalMin >= 1000) badges.push({ icon: <Clock size={14} color="#AF52DE" />, label: "+1000min" });
+
+  return (
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <Flame size={18} color="#FF9500" /> Régularité — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
+        {[
+          { val: streak, label: "Streak actuel", icon: <Flame size={18} color="#FF9500" /> },
+          { val: bestStreak, label: "Meilleur streak", icon: <Trophy size={18} color="#AF52DE" /> },
+          { val: total, label: "Total séances", icon: <BarChart2 size={18} color="#007AFF" /> },
+          { val: `${Math.floor(totalMin / 60)}h`, label: "Total heures", icon: <Clock size={18} color="#34C759" /> },
+        ].map(s => (
+          <div key={s.label} style={{ textAlign: "center", padding: "8px 4px", background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+            <div style={{ fontSize: 16 }}>{s.icon}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: USERS[user].color }}>{s.val}</div>
+            <div style={{ fontSize: 9, color: "#666" }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {badges.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {badges.map(b => (
+            <span key={b.label} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 99, padding: "4px 10px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+              {b.icon} <span style={{ fontWeight: 600 }}>{b.label}</span>
+            </span>
           ))}
         </div>
       )}
-
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: C.bg, borderRadius: 14, border: `1px solid ${C.gray200}` }}>
-        <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Message..." style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 15, color: C.black, outline: 'none', fontFamily: 'inherit' }} />
-        <button onClick={() => send()} disabled={loading || !input.trim()} style={{
-          width: 34, height: 34, borderRadius: '50%', border: 'none', flexShrink: 0,
-          background: !input.trim() || loading ? C.gray200 : USERS[uid].accent,
-          color: !input.trim() || loading ? C.gray400 : '#fff',
-          cursor: !input.trim() || loading ? 'not-allowed' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'all 0.15s',
-        }}>↑</button>
-      </div>
-    </div>
-  )
+      {badges.length === 0 && <div style={{ color: "#555", fontSize: 12 }}>Continue à t'entraîner pour débloquer des badges ! 💪</div>}
+    </Card>
+  );
 }
+// ─── WEEKLY GOALS ────────────────────────────────────────────────────────────
+function WeeklyGoals({ user, goals, setGoals, sessions }) {
+  const [editing, setEditing] = useState(false);
+  const userGoals = goals[user] || { count: 3, distanceRun: 10, distanceSwim: 0, distanceBike: 0 };
 
-function AnalysisSheet({ text, onClose }) {
-  if (!text) return null
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.white, borderRadius: '20px 20px 0 0', padding: '24px 24px 40px', width: '100%', maxWidth: 680, maxHeight: '75vh', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, background: C.gray200, borderRadius: 99, margin: '0 auto 22px' }} />
-        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Analyse de ta séance</div>
-        <div style={{ fontSize: 14, lineHeight: 1.75, color: C.gray800, whiteSpace: 'pre-wrap' }}>{text}</div>
-        <button onClick={onClose} style={{ marginTop: 22, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: C.bg, color: C.gray800, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Fermer</button>
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekSessions = sessions.filter(s => s.user === user && new Date(s.date) >= weekStart);
+
+  const currentCount = weekSessions.length;
+  const currentRun = weekSessions.filter(s => s.discipline === "Course à pied").reduce((a, s) => a + parseFloat(s.distance || 0), 0);
+  const currentSwim = weekSessions.filter(s => s.discipline === "Natation").reduce((a, s) => a + parseFloat(s.distance || 0), 0);
+  const currentBike = weekSessions.filter(s => s.discipline === "Vélo").reduce((a, s) => a + parseFloat(s.distance || 0), 0);
+
+  const saveGoals = (g) => {
+    setGoals({ ...goals, [user]: { ...userGoals, ...g } });
+  };
+
+  const pb = (curr, max, color) => {
+    const pct = max ? Math.min((curr / max) * 100, 100) : 0;
+    return (
+      <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width 0.5s" }} />
       </div>
-    </div>
-  )
-}
+    );
+  };
 
-function DashboardView({ uid, sessions, wellness, onSave }) {
-  const cutoff = sevenDaysAgo()
-  const week = sessions.filter(s => s.user_id === uid && new Date(s.date) >= cutoff)
-  const totalMin = week.reduce((a, s) => a + (s.duration || 0), 0)
-  const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
-  const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 13) * 100) : null
-  const scoreColor = wellScore >= 70 ? '#22c55e' : wellScore >= 40 ? '#f59e0b' : '#ef4444'
+  const inp = { width: 50, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", padding: "4px 8px", borderRadius: 4, textAlign: "right", fontFamily: "inherit" };
 
   return (
-    <div>
-      <StatRow label="Séances" value={week.length} sub="cette semaine" color={USERS[uid].accent} />
-      <StatRow label="Volume" value={`${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')}`} sub="cette semaine" />
-      <StatRow label="Bien-être" value={wellScore !== null ? `${wellScore}%` : '—'} sub="aujourd'hui" color={wellScore ? scoreColor : C.gray400} />
-      <Divider />
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Check-in du matin</div>
-      <WellnessCheck uid={uid} wellness={wellness} onSave={onSave} />
-      <Divider />
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Jalons</div>
-      <MilestoneList uid={uid} sessions={sessions} />
-      <Divider />
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Historique</div>
-      <SessionList uid={uid} sessions={sessions} />
-    </div>
-  )
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+          <Trophy size={18} /> Objectifs Hebdomadaires
+        </div>
+        <button onClick={() => setEditing(!editing)} style={{ background: "none", border: "none", color: USERS[user].color, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+          {editing ? "OK" : "Modifier"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Calendar size={14} /> Séances ({currentCount}/{userGoals.count})</span>
+            {editing && <input type="number" style={inp} value={userGoals.count} onChange={e => saveGoals({ count: +e.target.value })} />}
+          </div>
+          {pb(currentCount, userGoals.count, USERS[user].color)}
+        </div>
+
+        {(userGoals.distanceRun > 0 || editing) && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Footprints size={14} /> Course ({currentRun.toFixed(1)}/{userGoals.distanceRun} km)</span>
+              {editing && <input type="number" style={inp} value={userGoals.distanceRun} onChange={e => saveGoals({ distanceRun: +e.target.value })} />}
+            </div>
+            {pb(currentRun, userGoals.distanceRun, "#ff6b35")}
+          </div>
+        )}
+
+        {(userGoals.distanceBike > 0 || editing) && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Bike size={14} /> Vélo ({currentBike.toFixed(1)}/{userGoals.distanceBike} km)</span>
+              {editing && <input type="number" style={inp} value={userGoals.distanceBike} onChange={e => saveGoals({ distanceBike: +e.target.value })} />}
+            </div>
+            {pb(currentBike, userGoals.distanceBike, "#3b82f6")}
+          </div>
+        )}
+
+        {(userGoals.distanceSwim > 0 || editing) && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Waves size={14} /> Natation ({currentSwim.toFixed(1)}/{userGoals.distanceSwim} m)</span>
+              {editing && <input type="number" style={inp} value={userGoals.distanceSwim} onChange={e => saveGoals({ distanceSwim: +e.target.value })} />}
+            </div>
+            {pb(currentSwim, userGoals.distanceSwim, "#00d4ff")}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
 }
 
-// ─── ROOT ─────────────────────────────────────────────────────────────────────
+// ─── PROGRESS CHARTS ─────────────────────────────────────────────────────────
+function ProgressCharts({ user, sessions }) {
+  const us = sessions.filter(s => s.user === user);
+
+  // Volume over last 8 weeks
+  const weeks = [];
+  const now = new Date();
+  for (let i = 7; i >= 0; i--) {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay() + 1 - i * 7);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+
+    const ws = us.filter(s => { const d = new Date(s.date); return d >= start && d < end; });
+    const dur = ws.reduce((a, s) => a + (+s.duration || 0), 0);
+    const rpeAvg = ws.length ? ws.reduce((a, s) => a + (+s.rpe || 0), 0) / ws.length : 0;
+
+    weeks.push({ weekStr: `${start.getDate()}/${start.getMonth()+1}`, dur, rpeAvg });
+  }
+
+  const maxDur = Math.max(...weeks.map(w => w.dur), 1);
+  const chartH = 100;
+
+  return (
+    <Card>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <BarChart2 size={18} /> Volume & RPE — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", height: chartH, gap: 4, paddingBottom: 20, position: "relative" }}>
+        {weeks.map((w, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+            <div style={{ width: "100%", background: `${USERS[user].color}40`, borderRadius: "4px 4px 0 0",
+              height: `${(w.dur / maxDur) * chartH}px`, minHeight: w.dur > 0 ? 4 : 0, transition: "height 0.3s" }} />
+
+            {/* RPE Dot */}
+            {w.dur > 0 && (
+              <div style={{ position: "absolute", bottom: `${(w.rpeAvg / 10) * chartH}px`, width: 6, height: 6,
+                borderRadius: "50%", background: "#ff4d4d", zIndex: 10, transform: "translateY(50%)" }} />
+            )}
+
+            <div style={{ position: "absolute", bottom: -18, fontSize: 9, color: "#888", whiteSpace: "nowrap", transform: "rotate(-45deg)", transformOrigin: "top left" }}>
+              {w.weekStr}
+            </div>
+          </div>
+        ))}
+        {/* Legend */}
+        <div style={{ position: "absolute", top: -10, right: 0, fontSize: 10, display: "flex", gap: 8 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, background: `${USERS[user].color}40`, borderRadius: 2 }} /> Volume</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ff4d4d" }} /> RPE</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── PROFILE / SETTINGS ──────────────────────────────────────────────────────
+function ProfileSettings({ user, weightData, setWeightData, hrZones, setHrZones }) {
+  const [weight, setWeight] = useState("");
+  const [fcMax, setFcMax] = useState(hrZones[user]?.max || 190);
+
+  const addWeight = () => {
+    if (!weight) return;
+    const now = new Date().toISOString().slice(0, 10);
+    const newEntry = { date: now, val: parseFloat(weight) };
+    const userW = weightData[user] || [];
+    const existing = userW.findIndex(w => w.date === now);
+    let updated = [...userW];
+    if (existing >= 0) updated[existing] = newEntry;
+    else updated.push(newEntry);
+    setWeightData({ ...weightData, [user]: updated.sort((a, b) => new Date(a.date) - new Date(b.date)) });
+    setWeight("");
+  };
+
+  const saveHr = () => {
+    const max = parseInt(fcMax);
+    const z = { max, z1: Math.round(max * 0.6), z2: Math.round(max * 0.7), z3: Math.round(max * 0.8), z4: Math.round(max * 0.9) };
+    setHrZones({ ...hrZones, [user]: z });
+  };
+
+  const userW = weightData[user] || [];
+  const currZones = hrZones[user] || { max: 190, z1: 114, z2: 133, z3: 152, z4: 171 };
+
+  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, flex: 1, outline: "none", fontFamily: "inherit" };
+  const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
+    borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Weight Tracker */}
+      <Card>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <BarChart2 size={18} /> Suivi du poids
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input type="number" step="0.1" placeholder="Poids (kg)" value={weight} onChange={e => setWeight(e.target.value)} style={inp} />
+          <button onClick={addWeight} style={btn}>Ajouter</button>
+        </div>
+        {userW.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: 4, paddingBottom: 8 }}>
+            {userW.slice(-10).map((w, i) => (
+              <div key={i} style={{ background: "rgba(255,255,255,0.03)", padding: "6px 10px", borderRadius: 8, textAlign: "center", minWidth: 60 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: USERS[user].color }}>{w.val}</div>
+                <div style={{ fontSize: 9, color: "#888" }}>{w.date.slice(5)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "#666" }}>Aucune donnée.</div>
+        )}
+      </Card>
+
+      {/* HR Zones */}
+      <Card>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <HeartPulse size={18} color="#ef4444" /> Zones de Fréquence Cardiaque
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
+          <div style={{ fontSize: 13, color: "#aaa" }}>FC Max</div>
+          <input type="number" value={fcMax} onChange={e => setFcMax(e.target.value)} style={inp} />
+          <button onClick={saveHr} style={btn}>Calculer</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(255,255,255,0.03)", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#aaa" }}>Zone 1 (Récup)</span><span>&lt; {currZones.z1} bpm</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(59,130,246,0.1)", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#3b82f6" }}>Zone 2 (Endurance)</span><span>{currZones.z1} - {currZones.z2} bpm</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(16,185,129,0.1)", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#10b981" }}>Zone 3 (Tempo)</span><span>{currZones.z2} - {currZones.z3} bpm</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(245,158,11,0.1)", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#f59e0b" }}>Zone 4 (Seuil)</span><span>{currZones.z3} - {currZones.z4} bpm</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(239,68,68,0.1)", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#ef4444" }}>Zone 5 (VMA)</span><span>&gt; {currZones.z4} bpm</span>
+          </div>
+        </div>
+      </Card>
+      {/* Export CSV */}
+      <Card>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <Download size={18} /> Données
+        </div>
+        <button onClick={() => {
+          const us = JSON.parse(window.localStorage.getItem("tri_sessions") || "[]").filter(s => s.user === user);
+          let csv = "Date,Discipline,Duree(min),RPE,Distance,Vitesse,Notes\n";
+          us.forEach(s => {
+            csv += `${s.date},${s.discipline},${s.duration},${s.rpe || ""},${s.distance || ""},${s.vitesse || s.allure || ""},"${(s.notes || "").replace(/"/g, '""')}"\n`;
+          });
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = `prepa_alfa_sessions_${user}.csv`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }} style={{ ...btn, width: "100%", background: "rgba(255,255,255,0.1)", color: "#fff" }}>
+          Exporter l'historique (CSV)
+        </button>
+      </Card>
+    </div>
+  );
+}
+
+// ─── FITNESS TESTS ───────────────────────────────────────────────────────────
+function FitnessTests({ user, tests, setTests }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ type: "VMA (km/h)", val: "", date: new Date().toISOString().slice(0, 10) });
+
+  const userTests = tests[user] || [];
+
+  const addTest = () => {
+    if (!form.val) return;
+    const newTests = [...userTests, { id: Date.now().toString(), ...form }];
+    setTests({ ...tests, [user]: newTests.sort((a, b) => new Date(b.date) - new Date(a.date)) });
+    setForm({ ...form, val: "" });
+    setEditing(false);
+  };
+
+  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+  const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
+    borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" };
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+          <BarChart2 size={18} /> Tests Physiques
+        </div>
+        <button onClick={() => setEditing(!editing)} style={{ background: "none", border: "none", color: USERS[user].color, cursor: "pointer", display: "flex", alignItems: "center" }}>
+          {editing ? <X size={20} /> : <Plus size={20} />}
+        </button>
+      </div>
+
+      {editing && (
+        <div style={{ marginBottom: 16, padding: 12, background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} style={inp}>
+              <option>VMA (km/h)</option>
+              <option>Seuil FTP (W)</option>
+              <option>Cooper (m)</option>
+              <option>Test 400m Nat (min)</option>
+              <option>1RM Squat (kg)</option>
+              <option>1RM DC (kg)</option>
+            </select>
+            <input type="number" step="0.1" placeholder="Valeur" value={form.val} onChange={e => setForm({ ...form, val: e.target.value })} style={inp} />
+          </div>
+          <button onClick={addTest} style={btn}>Enregistrer</button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {userTests.length === 0 ? <div style={{ fontSize: 13, color: "#666" }}>Aucun test enregistré.</div> : null}
+        {userTests.map(t => (
+          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: 8 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{t.type}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{t.date}</div>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: USERS[user].color }}>{t.val}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─── PLANNED SESSIONS ────────────────────────────────────────────────────────
+function PlannedSessions({ user, planned, setPlanned }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), discipline: "Course à pied", desc: "" });
+
+  const userPlanned = planned[user] || [];
+
+  const addPlan = () => {
+    if (!form.desc) return;
+    const newP = [...userPlanned, { id: Date.now().toString(), ...form }];
+    setPlanned({ ...planned, [user]: newP.sort((a, b) => new Date(a.date) - new Date(b.date)) });
+    setForm({ ...form, desc: "" });
+    setEditing(false);
+  };
+
+  const deletePlan = (id) => {
+    setPlanned({ ...planned, [user]: userPlanned.filter(p => p.id !== id) });
+  };
+
+  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+  const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
+    borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" };
+
+  const upcoming = userPlanned.filter(p => new Date(p.date) >= new Date(new Date().setHours(0,0,0,0)));
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+          <CalendarDays size={18} /> Séances Planifiées
+        </div>
+        <button onClick={() => setEditing(!editing)} style={{ background: "none", border: "none", color: USERS[user].color, cursor: "pointer", display: "flex", alignItems: "center" }}>
+          {editing ? <X size={20} /> : <Plus size={20} />}
+        </button>
+      </div>
+
+      {editing && (
+        <div style={{ marginBottom: 16, padding: 12, background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inp} />
+            <select value={form.discipline} onChange={e => setForm({ ...form, discipline: e.target.value })} style={inp}>
+              {DISCIPLINES.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <input type="text" placeholder="Description courte (ex: 4x1000m R=1:30)" value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} style={{ ...inp, marginBottom: 8 }} />
+          <button onClick={addPlan} style={btn}>Programmer</button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {upcoming.length === 0 ? <div style={{ fontSize: 13, color: "#666" }}>Aucune séance prévue.</div> : null}
+        {upcoming.map(p => (
+          <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "rgba(255,255,255,0.05)", borderRadius: 12, color: USERS[user].color }}>
+              {getDiscIcon(p.discipline, 20)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{p.desc}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{new Date(p.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+            </div>
+            <button onClick={() => deletePlan(p.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>🗑️</button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [uid, setUid] = useState('louis')
-  const [tab, setTab] = useState('home')
-  const [sessions, setSessions] = useState([])
-  const [wellness, setWellness] = useState([])
-  const [analysis, setAnalysis] = useState(null)
-  const [booting, setBooting] = useState(true)
+  const [activeUser, setActiveUser] = useState("louis");
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [sessions, setSessions] = useStorage("tri_sessions", []);
+  const [wellness, setWellness] = useStorage("tri_wellness", []);
+  const [goals, setGoals] = useStorage("tri_goals", {});
+  const [weightData, setWeightData] = useStorage("tri_weight", {});
+  const [hrZones, setHrZones] = useStorage("tri_hr_zones", {});
+  const [tests, setTests] = useStorage("tri_tests", {});
+  const [planned, setPlanned] = useStorage("tri_planned", {});
+  const [analysis, setAnalysis] = useState(null);
 
-  const load = useCallback(async () => {
-    const [{ data: s }, { data: w }] = await Promise.all([
-      supabase.from('sessions').select('*').order('date', { ascending: false }),
-      supabase.from('wellness').select('*').order('date', { ascending: false }),
-    ])
-    setSessions(s || []); setWellness(w || []); setBooting(false)
-  }, [])
+  async function handleAnalyze(session, lastSame) {
+    const sys = buildCoachPrompt(activeUser, sessions, wellness);
+    let detail = `Discipline : ${session.discipline}\nDurée : ${session.duration} min\nRPE : ${session.rpe}/10`;
+    if (session.distance) detail += `\nDistance : ${session.distance}${session.distanceUnit || ''}`;
+    if (session.allure) detail += `\nAllure : ${session.allure}`;
+    if (session.vitesse) detail += `\nVitesse moy : ${session.vitesse} km/h`;
+    if (session.denivele) detail += `\nDénivelé+ : ${session.denivele}m`;
+    if (session.nageType) detail += `\nType de nage : ${session.nageType}`;
+    if (session.veloType) detail += `\nType vélo : ${session.veloType}`;
+    if (session.capType) detail += `\nType sortie : ${session.capType}`;
+    if (session.muscuFocus) detail += `\nFocus : ${session.muscuFocus}`;
+    if (session.exercises && session.exercises.length) {
+      detail += `\nExercices :`;
+      session.exercises.forEach(e => {
+        if (e.name) detail += `\n  - ${e.name} : ${e.sets?.map(s => `${s.weight}kg × ${s.reps} reps`).join(' / ')}`;
+      });
+    }
+    if (session.notes) detail += `\nNotes : ${session.notes}`;
+    const msg = `Analyse cette séance que je viens d'enregistrer :\n${detail}
+${lastSame ? `\nComparaison avec la dernière séance de même type (${lastSame.date}) :\n- Durée : ${lastSame.duration} min\n- RPE : ${lastSame.rpe}/10` : "\nC'est la première séance de ce type enregistrée."}
 
-  useEffect(() => { load() }, [load])
-
-  async function handleAnalyze(session, last) {
-    try {
-      const msg = `Séance : ${session.discipline}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}, RPE ${session.rpe}/10.${session.notes ? ` Notes : ${session.notes}.` : ''}${last ? ` Dernière ${session.discipline} (${last.date}) : ${last.duration}min, RPE ${last.rpe}/10.` : ' Première séance de ce type.'} Donne une analyse en 4 lignes.`
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: msg }])
-      setAnalysis(reply)
-    } catch { /* silent fail */ }
+Donne-moi une analyse courte (4–6 lignes max) : feedback sur la séance, comparaison, conseil pour la prochaine.`;
+    const reply = await callClaude(sys, msg);
+    setAnalysis(reply);
   }
 
   const tabs = [
-    { id: 'home', label: 'Accueil', icon: '⌂' },
-    { id: 'session', label: 'Séance', icon: '+' },
-    { id: 'coach', label: 'Coach', icon: '💬' },
-    { id: 'plan', label: 'Plan', icon: '◎' },
-    { id: 'duel', label: 'Duel', icon: '⚡' },
-  ]
-
-  const titles = { home: null, session: 'Nouvelle séance', coach: 'Coach IA', plan: 'Plan d\'entraînement', duel: 'Duel' }
+    { id: "dashboard", label: "Accueil", icon: <Home size={22} /> },
+    { id: "session", label: "Séance", icon: <Plus size={22} /> },
+    { id: "coach", label: "Coach", icon: <Bot size={22} /> },
+    { id: "plan", label: "Plan", icon: <CalendarDays size={22} /> },
+    { id: "duel", label: "Duel", icon: <Swords size={22} /> },
+    { id: "stats", label: "Stats", icon: <BarChart2 size={22} /> },
+    { id: "profil", label: "Profil", icon: <User size={22} /> },
+  ];
 
   return (
-    <div style={{ background: C.white, minHeight: '100vh', fontFamily: '-apple-system, "SF Pro Text", "Helvetica Neue", sans-serif', color: C.black }}>
+    <div style={{
+      minHeight: "100vh", background: "#000000", color: "#FFFFFF",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    }}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 0; }
-        @keyframes pulse { 0%,60%,100% { opacity:0.3; transform:scale(0.8) } 30% { opacity:1; transform:scale(1) } }
-        button { -webkit-tap-highlight-color: transparent; }
-        input:focus, textarea:focus, select:focus { border-color: #999 !important; }
+        ::-webkit-scrollbar { width: 0px; }
+        input, select, textarea { color-scheme: dark; }
+        button:hover:not(:disabled) { filter: brightness(1.1); }
       `}</style>
 
       {/* HEADER */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(20px)', borderBottom: `1px solid ${C.gray100}` }}>
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            {tab === 'home'
-              ? <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.3 }}>Bonjour, <span style={{ color: USERS[uid].accent }}>{USERS[uid].name}</span> 👋</div>
-              : <div style={{ fontSize: 18, fontWeight: 600 }}>{titles[tab]}</div>}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ padding: '5px 11px', background: C.bg, borderRadius: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: USERS[uid].accent }}>J‑{daysLeft()}</div>
-              <div style={{ fontSize: 9, color: C.gray400, letterSpacing: '0.06em', textAlign: 'center' }}>COURSE</div>
-            </div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              {['louis', 'romain'].map(u => (
-                <button key={u} onClick={() => setUid(u)} style={{
-                  width: 32, height: 32, borderRadius: '50%', border: `2px solid ${uid === u ? USERS[u].accent : 'transparent'}`,
-                  background: uid === u ? USERS[u].accent : C.gray100,
-                  color: uid === u ? '#fff' : C.gray500,
-                  fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
-                  opacity: uid === u ? 1 : 0.5, transition: 'all 0.15s',
-                }}>{USERS[u].avatar}</button>
-              ))}
-            </div>
-          </div>
+      <div style={{
+        position: "sticky", top: 0, zIndex: 50,
+        background: "rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
+        borderBottom: "1px solid #1C1C1E",
+        padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+      }}>
+        <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: -0.5, flex: 1, minWidth: 100 }}>
+          <span style={{ color: USERS.louis.color }}>Prépa</span>
+          <span style={{ color: USERS.romain.color }}>-Alfa</span>
         </div>
+
+        {/* User switcher */}
+        <div style={{ display: "flex", gap: 4, background: "#1C1C1E", padding: 4, borderRadius: 999 }}>
+          {["louis", "romain"].map(uid => (
+            <button key={uid} onClick={() => setActiveUser(uid)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                borderRadius: 999, border: "none",
+                background: activeUser === uid ? USERS[uid].color : "transparent",
+                color: activeUser === uid ? "#fff" : "#8E8E93",
+                cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit", transition: "all 0.2s",
+              }}>
+              <Avatar user={uid} size={20} />
+              {USERS[uid].name}
+            </button>
+          ))}
+        </div>
+
+        <Countdown />
       </div>
 
-      {/* CONTENT */}
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 100px' }}>
-        {booting
-          ? <div style={{ textAlign: 'center', padding: 60, color: C.gray400 }}>Chargement...</div>
-          : <>
-            {tab === 'home' && <DashboardView uid={uid} sessions={sessions} wellness={wellness} onSave={load} />}
-            {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
-            {tab === 'coach' && <ChatView uid={uid} sessions={sessions} wellness={wellness} />}
-            {tab === 'plan' && <PlanView uid={uid} />}
-            {tab === 'duel' && <DuelView sessions={sessions} />}
-          </>}
+      {/* MAIN */}
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px 100px" }}>
+        {activeTab === "dashboard" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <MiniStats user={activeUser} sessions={sessions} wellness={wellness} />
+            <Streaks user={activeUser} sessions={sessions} />
+            <WellnessForm user={activeUser} wellness={wellness} setWellness={setWellness} />
+            <Milestones user={activeUser} sessions={sessions} />
+            <PersonalRecords user={activeUser} sessions={sessions} />
+            <SessionHistory user={activeUser} sessions={sessions} setSessions={setSessions} />
+          </div>
+        )}
+        {activeTab === "session" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <WeeklyGoals user={activeUser} goals={goals} setGoals={setGoals} sessions={sessions} />
+            <SessionForm user={activeUser} sessions={sessions} setSessions={setSessions} onAnalyze={handleAnalyze} />
+          </div>
+        )}
+        {activeTab === "coach" && (
+          <AIChat user={activeUser} sessions={sessions} wellness={wellness} />
+        )}
+        {activeTab === "plan" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <PlannedSessions user={activeUser} planned={planned} setPlanned={setPlanned} />
+            <TrainingPlan user={activeUser} sessions={sessions} wellness={wellness} />
+          </div>
+        )}
+        {activeTab === "duel" && (
+          <DuelDashboard sessions={sessions} wellness={wellness} />
+        )}
+        {activeTab === "stats" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <FitnessTests user={activeUser} tests={tests} setTests={setTests} />
+            <ProgressCharts user={activeUser} sessions={sessions} />
+          </div>
+        )}
+        {activeTab === "profil" && (
+          <ProfileSettings user={activeUser} weightData={weightData} setWeightData={setWeightData} hrZones={hrZones} setHrZones={setHrZones} />
+        )}
       </div>
 
-      {/* NAV */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(20px)', borderTop: `1px solid ${C.gray100}`, display: 'flex', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
+      {/* BOTTOM NAV */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        background: "rgba(0,0,0,0.90)", backdropFilter: "blur(20px)",
+        borderTop: "1px solid #1C1C1E",
+        display: "flex", padding: "10px 0 max(10px, env(safe-area-inset-bottom))",
+      }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, padding: '10px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            color: tab === t.id ? USERS[uid].accent : C.gray400, transition: 'color 0.12s',
-          }}>
-            <span style={{ fontSize: t.id === 'session' ? 22 : 18 }}>{t.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: tab === t.id ? 600 : 400 }}>{t.label}</span>
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              background: "none", border: "none", cursor: "pointer",
+              color: activeTab === t.id ? USERS[activeUser].color : "#555",
+              fontFamily: "inherit", transition: "color 0.2s",
+            }}>
+            <span style={{ color: activeTab === t.id ? USERS[activeUser].color : "#8E8E93", marginBottom: 2 }}>{t.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: activeTab === t.id ? 600 : 500 }}>{t.label}</span>
           </button>
         ))}
       </div>
 
-      <AnalysisSheet text={analysis} onClose={() => setAnalysis(null)} />
+      <AIAnalysisPopup analysis={analysis} onClose={() => setAnalysis(null)} />
     </div>
-  )
+  );
 }
