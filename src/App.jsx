@@ -4,7 +4,8 @@ import {
   Home, FileText, Bot, Calendar, Swords, BarChart2, User,
   Trophy, Flame, Clock, CalendarDays, ChevronDown, Check, X,
   Trash2, Edit2, Play, Medal, Settings, Download, Loader2, Plus,
-  Heart, TrendingUp, Award, Activity
+  Heart, TrendingUp, Award, Activity, ChevronRight,
+  MessageSquare, ArrowLeft, ListFilter
 } from "lucide-react";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -1912,6 +1913,443 @@ function PlannedSessions({ user, planned, setPlanned }) {
   );
 }
 
+// ─── HISTORIQUE ──────────────────────────────────────────────────────────────
+
+function formatSessionFull(s) {
+  const lines = [
+    `Date : ${s.date}`,
+    `Discipline : ${s.discipline}`,
+    `Durée : ${s.duration} min`,
+    `RPE : ${s.rpe}/10`,
+  ];
+  if (s.distance)    lines.push(`Distance : ${s.distance}${s.distanceUnit || ""}`);
+  if (s.allure)      lines.push(`Allure : ${s.allure}`);
+  if (s.vitesse)     lines.push(`Vitesse moy : ${s.vitesse} km/h`);
+  if (s.denivele)    lines.push(`Dénivelé+ : ${s.denivele}m`);
+  if (s.hrAvg)       lines.push(`FC moy : ${s.hrAvg} bpm`);
+  if (s.hrMax)       lines.push(`FC max : ${s.hrMax} bpm`);
+  if (s.nageType)    lines.push(`Type de nage : ${s.nageType}`);
+  if (s.veloType)    lines.push(`Type vélo : ${s.veloType}`);
+  if (s.capType)     lines.push(`Type sortie : ${s.capType}`);
+  if (s.muscuFocus)  lines.push(`Focus muscu : ${s.muscuFocus}`);
+  if (s.brick1)      lines.push(`Brick : ${s.brick1} → ${s.brick2}`);
+  if (s.recupType)   lines.push(`Récupération : ${s.recupType}`);
+  if (s.conditions)  lines.push(`Conditions : ${s.conditions}`);
+  if (s.exercises?.length) {
+    lines.push("Exercices :");
+    s.exercises.forEach(e => {
+      if (e.name) lines.push(`  • ${e.name} : ${(e.sets||[]).map(st => `${st.weight}kg×${st.reps}`).join(" / ")}`);
+    });
+  }
+  if (s.notes) lines.push(`Notes : ${s.notes}`);
+  return lines.join("\n");
+}
+
+function buildSessionCoachPrompt(user, session, sessions, wellness) {
+  const base = buildCoachPrompt(user, sessions, wellness);
+  return `${base}
+
+═══ SÉANCE EN COURS D'ANALYSE ═══
+${formatSessionFull(session)}
+
+L'utilisateur te parle de CETTE séance spécifique. Tu peux aussi t'appuyer sur tout son historique ci-dessus.`;
+}
+
+// ── Modale détail ────────────────────────────────────────────────────────────
+function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef();
+
+  useEffect(() => {
+    setAnalysis(null);
+    setAnalysisLoading(true);
+    setChatMessages([]);
+    const sys = buildCoachPrompt(user, sessions, wellness);
+    const detail = formatSessionFull(session);
+    const msg = `Analyse cette séance en détail :\n${detail}\n\nStructure ta réponse en 4 parties courtes :\n1. BILAN – qualité globale (intensité, volume, cohérence objectif tri)\n2. POINTS FORTS – ce qui est positif\n3. À AMÉLIORER – 1-2 points concrets\n4. CONSEIL SUIVANT – recommandation pour la prochaine séance de ce type\nMax 8 lignes au total.`;
+    callClaude(sys, msg)
+      .then(r => setAnalysis(r))
+      .catch(() => setAnalysis("Impossible de générer l'analyse."))
+      .finally(() => setAnalysisLoading(false));
+  }, [session.id]);
+
+  useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
+
+  async function sendChat() {
+    if (!chatInput.trim() || chatLoading) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: "user", content: msg }]);
+    setChatLoading(true);
+    const sys = buildSessionCoachPrompt(user, session, sessions, wellness);
+    const history = chatMessages.map(m => ({ role: m.role, content: m.content }));
+    try {
+      const reply = await callClaude(sys, msg, history);
+      setChatMessages(prev => [...prev, { role: "assistant", content: reply }]);
+    } catch {
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Erreur de connexion." }]);
+    }
+    setChatLoading(false);
+  }
+
+  const color = USERS[user].color;
+
+  // Metadata rows
+  const meta = [
+    { label: "Durée",    val: `${session.duration} min`, icon: <Clock size={14}/> },
+    session.distance && { label: "Distance", val: `${session.distance}${session.distanceUnit||""}`, icon: <TrendingUp size={14}/> },
+    session.rpe && { label: "RPE",      val: `${session.rpe}/10`, icon: <Activity size={14}/> },
+    session.vitesse && { label: "Vitesse",  val: `${session.vitesse} km/h`, icon: <Zap size={14}/> },
+    session.allure && { label: "Allure",   val: session.allure, icon: <Zap size={14}/> },
+    session.hrAvg && { label: "FC moy",   val: `${session.hrAvg} bpm`, icon: <Heart size={14}/> },
+    session.hrMax && { label: "FC max",   val: `${session.hrMax} bpm`, icon: <HeartPulse size={14}/> },
+    session.denivele && { label: "Dénivelé", val: `+${session.denivele}m`, icon: <TrendingUp size={14}/> },
+  ].filter(Boolean);
+
+  const subLabel = session.nageType || session.veloType || session.capType ||
+    session.muscuFocus || session.recupType ||
+    (session.brick1 ? `${session.brick1} → ${session.brick2}` : null);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      padding: "0",
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: "#0A0A0A", borderTop: `2px solid ${color}55`,
+        borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 720,
+        height: "92dvh", display: "flex", flexDirection: "column",
+        animation: "slideUp 0.28s cubic-bezier(.4,0,.2,1)",
+      }}>
+        <style>{`@keyframes slideUp { from { transform: translateY(100%); opacity:0 } to { transform: translateY(0); opacity:1 } }`}</style>
+
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0" }}>
+          <div style={{ width: 36, height: 4, background: "#333", borderRadius: 99 }} />
+        </div>
+
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12, padding: "14px 20px 10px",
+          borderBottom: "1px solid #1C1C1E",
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+            background: `${color}18`, border: `1px solid ${color}33`,
+            display: "flex", alignItems: "center", justifyContent: "center", color,
+          }}>
+            {getDiscIcon(session.discipline, 22)}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>{session.discipline}</div>
+            <div style={{ fontSize: 12, color: "#8E8E93" }}>
+              {new Date(session.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              {subLabel && ` · ${subLabel}`}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: "#1C1C1E", border: "none", borderRadius: 99, width: 32, height: 32,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "#8E8E93", flexShrink: 0,
+          }}><X size={16}/></button>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 18 }}>
+
+          {/* Metadata grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {meta.map(m => (
+              <div key={m.label} style={{
+                background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 12,
+                padding: "12px 10px", textAlign: "center",
+              }}>
+                <div style={{ color: "#8E8E93", marginBottom: 4 }}>{m.icon}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color }}>{m.val}</div>
+                <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Exercices muscu */}
+          {session.exercises?.some(e => e.name) && (
+            <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 12, color: "#8E8E93", fontWeight: 700, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>EXERCICES</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {session.exercises.filter(e => e.name).map((e, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                    <span style={{ fontWeight: 600 }}>{e.name}</span>
+                    <span style={{ color: "#8E8E93", fontSize: 12 }}>
+                      {(e.sets||[]).map((s, si) => (
+                        <span key={si}>
+                          {si > 0 && <span style={{ color: "#444", margin: "0 4px" }}>·</span>}
+                          <span style={{ color }}>{s.weight}kg</span>×{s.reps}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {session.notes && (
+            <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 12, color: "#8E8E93", fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>NOTES</div>
+              <div style={{ fontSize: 13, color: "#ccc", lineHeight: 1.6 }}>{session.notes}</div>
+            </div>
+          )}
+
+          {/* AI Analysis */}
+          <div style={{ background: "#0f1117", border: `1px solid ${color}33`, borderRadius: 14, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <Bot size={16} color={color} />
+              <span style={{ fontSize: 12, fontWeight: 700, color, letterSpacing: 1, fontFamily: "monospace" }}>ANALYSE IA</span>
+              {analysisLoading && <Loader2 size={13} color="#555" style={{ animation: "spin 1s linear infinite" }} />}
+            </div>
+            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            {analysisLoading ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[100, 80, 90, 70].map((w, i) => (
+                  <div key={i} style={{ height: 10, background: "#1C1C1E", borderRadius: 6, width: `${w}%`, animation: "pulse 1.5s ease-in-out infinite", animationDelay: `${i*0.15}s` }} />
+                ))}
+                <style>{`@keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:.7} }`}</style>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#ddd", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{analysis}</div>
+            )}
+          </div>
+
+          {/* Chat about this session */}
+          <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <MessageSquare size={16} color="#8E8E93" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#8E8E93", letterSpacing: 1, fontFamily: "monospace" }}>DISCUTER AVEC LE COACH</span>
+            </div>
+
+            {chatMessages.length === 0 && !chatLoading && (
+              <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>
+                Pose une question sur cette séance…
+              </div>
+            )}
+
+            {chatMessages.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 260, overflowY: "auto" }}>
+                {chatMessages.map((m, i) => (
+                  <div key={i} style={{
+                    alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                    maxWidth: "88%",
+                    background: m.role === "user" ? `${color}22` : "rgba(255,255,255,0.05)",
+                    border: `1px solid ${m.role === "user" ? color+"44" : "rgba(255,255,255,0.08)"}`,
+                    borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    padding: "8px 12px", fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap",
+                  }}>
+                    {m.content}
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div style={{ alignSelf: "flex-start", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 12, fontSize: 12, color: "#8E8E93", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Coach répond…
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && sendChat()}
+                placeholder="Ex: Comment améliorer mon allure ?"
+                style={{
+                  flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10, color: "#fff", padding: "9px 12px", fontSize: 13,
+                  outline: "none", fontFamily: "inherit",
+                }}
+              />
+              <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()} style={{
+                padding: "9px 14px", borderRadius: 10, border: "none",
+                background: chatLoading || !chatInput.trim() ? "rgba(255,255,255,0.06)" : `linear-gradient(135deg, ${color}99, ${color})`,
+                color: chatLoading || !chatInput.trim() ? "#555" : "#000",
+                cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
+                fontWeight: 700, fontFamily: "inherit", fontSize: 13,
+              }}>↑</button>
+            </div>
+          </div>
+
+          {/* Spacer for iOS safe area */}
+          <div style={{ height: 20 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Page historique ──────────────────────────────────────────────────────────
+function HistoriquePage({ user, sessions, setSessions, wellness }) {
+  const [filter, setFilter] = useState("Toutes");
+  const [selected, setSelected] = useState(null);
+
+  const allDisc = ["Toutes", ...DISCIPLINES];
+
+  const userSessions = sessions
+    .filter(s => s.user === user && (filter === "Toutes" || s.discipline === filter))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const color = USERS[user].color;
+
+  const subInfo = (s) => {
+    if (s.distance) return `${s.distance}${s.distanceUnit || ""}`;
+    if (s.discipline === "Musculation" && s.exercises) {
+      const named = s.exercises.filter(e => e.name);
+      return named.length ? `${named.length} exercices` : null;
+    }
+    return null;
+  };
+
+  // Group by month
+  const grouped = [];
+  let lastMonth = null;
+  userSessions.forEach(s => {
+    const m = new Date(s.date).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    if (m !== lastMonth) { grouped.push({ type: "month", label: m }); lastMonth = m; }
+    grouped.push({ type: "session", data: s });
+  });
+
+  const rpeColor = (rpe) => {
+    const r = +rpe;
+    if (r <= 4) return "#34C759";
+    if (r <= 6) return "#FFD60A";
+    if (r <= 8) return "#FF9500";
+    return "#FF3B30";
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+
+        {/* Filter bar */}
+        <div style={{
+          position: "sticky", top: 60, zIndex: 40,
+          background: "rgba(0,0,0,0.92)", backdropFilter: "blur(16px)",
+          borderBottom: "1px solid #1C1C1E", padding: "10px 0 10px",
+          marginLeft: -16, marginRight: -16, paddingLeft: 16,
+          display: "flex", gap: 8, overflowX: "auto",
+        }}>
+          <style>{`.hist-filter::-webkit-scrollbar{display:none}`}</style>
+          {allDisc.map(d => (
+            <button key={d} onClick={() => setFilter(d)} style={{
+              flexShrink: 0, padding: "6px 14px", borderRadius: 99, border: "none",
+              background: filter === d ? color : "#1C1C1E",
+              color: filter === d ? "#000" : "#8E8E93",
+              fontWeight: filter === d ? 700 : 500, fontSize: 12,
+              cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+              display: "flex", alignItems: "center", gap: 5,
+            }}>
+              {d !== "Toutes" && <span style={{ opacity: 0.8 }}>{getDiscIcon(d, 12)}</span>}
+              {d}
+            </button>
+          ))}
+          <div style={{ paddingRight: 16, flexShrink: 0, width: 1 }} />
+        </div>
+
+        {/* Count */}
+        <div style={{ padding: "14px 0 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 13, color: "#8E8E93" }}>
+            <span style={{ color, fontWeight: 700 }}>{userSessions.length}</span> séance{userSessions.length !== 1 ? "s" : ""}
+            {filter !== "Toutes" && ` · ${filter}`}
+          </div>
+          <div style={{ fontSize: 11, color: "#555", display: "flex", alignItems: "center", gap: 4 }}>
+            <ListFilter size={12} /> Toucher pour détails + IA
+          </div>
+        </div>
+
+        {/* List */}
+        {userSessions.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#555" }}>
+            <FileText size={32} color="#333" style={{ marginBottom: 12 }} />
+            <div style={{ fontSize: 14 }}>Aucune séance enregistrée{filter !== "Toutes" ? ` en ${filter}` : ""}.</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {grouped.map((item, idx) => {
+              if (item.type === "month") return (
+                <div key={`m-${idx}`} style={{
+                  padding: "16px 0 8px",
+                  fontSize: 11, fontWeight: 700, color: "#555",
+                  letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "monospace",
+                }}>{item.label}</div>
+              );
+              const s = item.data;
+              const sub = subInfo(s);
+              return (
+                <button key={s.id} onClick={() => setSelected(s)} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  background: "none", border: "none", borderBottom: "1px solid #1C1C1E",
+                  padding: "12px 0", cursor: "pointer", textAlign: "left", width: "100%",
+                  fontFamily: "inherit",
+                  transition: "background 0.1s",
+                }}>
+                  {/* Disc icon */}
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 13, flexShrink: 0,
+                    background: `${color}14`, border: `1px solid ${color}2a`,
+                    display: "flex", alignItems: "center", justifyContent: "center", color,
+                  }}>
+                    {getDiscIcon(s.discipline, 20)}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{s.discipline}</div>
+                    <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span>{new Date(s.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
+                      <span style={{ color: "#444" }}>·</span>
+                      <span>{s.duration} min</span>
+                      {sub && <><span style={{ color: "#444" }}>·</span><span>{sub}</span></>}
+                    </div>
+                  </div>
+
+                  {/* RPE badge + chevron */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    {s.rpe && (
+                      <div style={{
+                        background: `${rpeColor(s.rpe)}15`, border: `1px solid ${rpeColor(s.rpe)}44`,
+                        borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: rpeColor(s.rpe),
+                      }}>RPE {s.rpe}</div>
+                    )}
+                    <ChevronRight size={16} color="#333" />
+                  </div>
+                </button>
+              );
+            })}
+            <div style={{ height: 8 }} />
+          </div>
+        )}
+      </div>
+
+      {/* Detail modal */}
+      {selected && (
+        <SessionDetailModal
+          session={selected}
+          user={user}
+          sessions={sessions}
+          wellness={wellness}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [activeUser, setActiveUser] = useState("louis");
@@ -1952,13 +2390,14 @@ Donne-moi une analyse courte (4–6 lignes max) : feedback sur la séance, compa
   }
 
   const tabs = [
-    { id: "dashboard", label: "Accueil", icon: <Home size={22} /> },
-    { id: "session", label: "Séance", icon: <Plus size={22} /> },
-    { id: "coach", label: "Coach", icon: <Bot size={22} /> },
-    { id: "plan", label: "Plan", icon: <CalendarDays size={22} /> },
-    { id: "duel", label: "Duel", icon: <Swords size={22} /> },
-    { id: "stats", label: "Stats", icon: <BarChart2 size={22} /> },
-    { id: "profil", label: "Profil", icon: <User size={22} /> },
+    { id: "dashboard",  label: "Accueil",    icon: <Home size={22} /> },
+    { id: "session",    label: "Séance",     icon: <Plus size={22} /> },
+    { id: "historique", label: "Historique", icon: <FileText size={22} /> },
+    { id: "coach",      label: "Coach",      icon: <Bot size={22} /> },
+    { id: "plan",       label: "Plan",       icon: <CalendarDays size={22} /> },
+    { id: "duel",       label: "Duel",       icon: <Swords size={22} /> },
+    { id: "stats",      label: "Stats",      icon: <BarChart2 size={22} /> },
+    { id: "profil",     label: "Profil",     icon: <User size={22} /> },
   ];
 
   return (
@@ -2023,6 +2462,9 @@ Donne-moi une analyse courte (4–6 lignes max) : feedback sur la séance, compa
             <WeeklyGoals user={activeUser} goals={goals} setGoals={setGoals} sessions={sessions} />
             <SessionForm user={activeUser} sessions={sessions} setSessions={setSessions} onAnalyze={handleAnalyze} />
           </div>
+        )}
+        {activeTab === "historique" && (
+          <HistoriquePage user={activeUser} sessions={sessions} setSessions={setSessions} wellness={wellness} />
         )}
         {activeTab === "coach" && (
           <AIChat user={activeUser} sessions={sessions} wellness={wellness} />
