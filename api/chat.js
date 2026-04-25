@@ -34,7 +34,17 @@ export default async function handler(req) {
     )
 
     const data = await response.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Erreur de réponse.'
+    
+    // Retourne la vraie erreur pour debug
+    if (!data.candidates) {
+      return new Response(JSON.stringify({
+        content: [{ type: 'text', text: JSON.stringify(data) }]
+      }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      })
+    }
+
+    const text = data.candidates[0].content.parts[0].text
 
     return new Response(JSON.stringify({
       content: [{ type: 'text', text }]
@@ -42,7 +52,9 @@ export default async function handler(req) {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({
+      content: [{ type: 'text', text: 'Erreur: ' + err.message }]
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     })
