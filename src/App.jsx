@@ -4,8 +4,13 @@ import {
   Home, FileText, Bot, Calendar, Swords, BarChart2, User,
   Trophy, Flame, Clock, CalendarDays, ChevronDown, Check, X,
   Trash2, Edit2, Play, Medal, Settings, Download, Loader2, Plus,
-  Heart
+  Heart, TrendingUp, Award, Activity
 } from "lucide-react";
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer
+} from "recharts";
 
 // ─── ANTHROPIC API ───────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, userMessage, history = []) {
@@ -660,77 +665,357 @@ function Milestones({ user, sessions }) {
 }
 
 // ─── DUEL DASHBOARD ───────────────────────────────────────────────────────────
-function DuelDashboard({ sessions, wellness }) {
+// ─── DUEL HELPERS ────────────────────────────────────────────────────────────
+function getWeekSlots(n = 8) {
+  const slots = [];
   const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + 1);
-  weekStart.setHours(0, 0, 0, 0);
+  for (let i = n - 1; i >= 0; i--) {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay() + 1 - i * 7);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    slots.push({ label: `S${n - i}`, start, end });
+  }
+  return slots;
+}
 
-  const weekSessions = sessions.filter(s => new Date(s.date) >= weekStart);
+function computeRadarScores(uid, sessions, wellness) {
+  const us = sessions.filter(s => s.user === uid);
+  const now = new Date();
+  const cutoff4w = new Date(now); cutoff4w.setDate(now.getDate() - 28);
+  const cutoff8w = new Date(now); cutoff8w.setDate(now.getDate() - 56);
+  const recent = us.filter(s => new Date(s.date) >= cutoff4w);
+  const prev    = us.filter(s => new Date(s.date) >= cutoff8w && new Date(s.date) < cutoff4w);
 
-  const stats = (uid) => {
-    const userW = weekSessions.filter(s => s.user === uid);
-    const byDisc = {};
-    DISCIPLINES.forEach(d => {
-      const disc = userW.filter(s => s.discipline === d);
-      byDisc[d] = { count: disc.length, minutes: disc.reduce((a, s) => a + (+s.duration || 0), 0) };
+  // Volume : minutes/semaine moyennes sur 4 sem (norm 0–100, 300min/sem = 100)
+  const avgMinWeek = recent.reduce((a, s) => a + (+s.duration || 0), 0) / 4;
+  const volume = Math.min(100, Math.round((avgMinWeek / 300) * 100));
+
+  // Intensité : RPE moyen → centré sur 6/10, 10/10 = 100
+  const rpeArr = recent.filter(s => s.rpe).map(s => +s.rpe);
+  const avgRpe = rpeArr.length ? rpeArr.reduce((a, b) => a + b, 0) / rpeArr.length : 5;
+  const intensite = Math.min(100, Math.round((avgRpe / 10) * 100));
+
+  // Régularité : ratio jours actifs / 28 derniers jours
+  const activeDays = new Set(recent.map(s => s.date)).size;
+  const regularite = Math.min(100, Math.round((activeDays / 16) * 100));
+
+  // Progression : croissance volume recent vs prev
+  const volRecent = recent.reduce((a, s) => a + (+s.duration || 0), 0);
+  const volPrev   = prev.reduce((a, s) => a + (+s.duration || 0), 0);
+  const prog = volPrev > 0 ? Math.min(100, Math.round(50 + ((volRecent - volPrev) / volPrev) * 50)) : 50;
+
+  // Endurance : distance endurance totale en km (750m swim = 0.75km; norm 0–100, 100km = 100)
+  const distKm = recent
+    .filter(s => ["Natation","Vélo","Course à pied"].includes(s.discipline) && s.distance)
+    .reduce((a, s) => {
+      const d = parseFloat(s.distance);
+      return a + (s.distanceUnit === "m" ? d / 1000 : d);
+    }, 0);
+  const endurance = Math.min(100, Math.round((distKm / 80) * 100));
+
+  return { volume, intensite, regularite, progression: prog, endurance };
+}
+
+function computeScore(scores) {
+  const weights = { volume: 0.25, intensite: 0.15, regularite: 0.25, progression: 0.20, endurance: 0.15 };
+  return Math.round(
+    Object.entries(weights).reduce((acc, [k, w]) => acc + (scores[k] || 0) * w, 0)
+  );
+}
+
+// Custom tooltip
+const DarkTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "#1C1C1E", border: "1px solid #3C3C3E", borderRadius: 10,
+      padding: "10px 14px", fontSize: 12,
+    }}>
+      <div style={{ color: "#8E8E93", marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color, fontWeight: 700 }}>
+          {p.name}: {p.value}{p.unit || ""}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+function SectionLabel({ icon, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+      <span style={{ color: "#8E8E93" }}>{icon}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "#EBEBF5", letterSpacing: 0.5, textTransform: "uppercase", fontFamily: "monospace" }}>{title}</span>
+    </div>
+  );
+}
+
+function DuelDashboard({ sessions, wellness }) {
+  const weeks = getWeekSlots(8);
+
+  // ── Radar data ──
+  const lScores = computeRadarScores("louis", sessions, wellness);
+  const rScores = computeRadarScores("romain", sessions, wellness);
+  const lScore = computeScore(lScores);
+  const rScore = computeScore(rScores);
+
+  const radarData = [
+    { axis: "Volume",      louis: lScores.volume,      romain: rScores.volume },
+    { axis: "Intensité",   louis: lScores.intensite,   romain: rScores.intensite },
+    { axis: "Régularité",  louis: lScores.regularite,  romain: rScores.regularite },
+    { axis: "Progression", louis: lScores.progression, romain: rScores.progression },
+    { axis: "Endurance",   louis: lScores.endurance,   romain: rScores.endurance },
+  ];
+
+  // ── Line chart builder ──
+  const buildLineData = (disc, distUnit) =>
+    weeks.map(w => {
+      const lSess = sessions.filter(s => s.user === "louis" && s.discipline === disc && new Date(s.date) >= w.start && new Date(s.date) < w.end);
+      const rSess = sessions.filter(s => s.user === "romain" && s.discipline === disc && new Date(s.date) >= w.start && new Date(s.date) < w.end);
+      const sum = (arr) => arr.reduce((a, s) => {
+        const d = parseFloat(s.distance || 0);
+        return a + (distUnit === "m" ? d : d);
+      }, 0);
+      return {
+        semaine: w.label,
+        Louis: parseFloat(sum(lSess).toFixed(1)),
+        Romain: parseFloat(sum(rSess).toFixed(1)),
+      };
     });
-    return byDisc;
+
+  const bikeData  = buildLineData("Vélo", "km");
+  const runData   = buildLineData("Course à pied", "km");
+  const swimData  = buildLineData("Natation", "m");
+
+  // ── Stats table ──
+  const tableStats = (uid) => {
+    const us = sessions.filter(s => s.user === uid);
+    const allWeeks = getWeekSlots(52);
+    const activeWeeks = allWeeks.filter(w => us.some(s => new Date(s.date) >= w.start && new Date(s.date) < w.end)).length;
+    const totalSess = us.length;
+    const seancesPerWeek = activeWeeks > 0 ? (totalSess / activeWeeks).toFixed(1) : "0";
+    const avgRpe = us.filter(s => s.rpe).length
+      ? (us.filter(s => s.rpe).reduce((a, s) => a + +s.rpe, 0) / us.filter(s => s.rpe).length).toFixed(1)
+      : "—";
+
+    const dist = (disc, unit) => {
+      const arr = us.filter(s => s.discipline === disc && s.distance).map(s => parseFloat(s.distance));
+      if (!arr.length) return "0";
+      const total = arr.reduce((a, b) => a + b, 0);
+      return unit === "m" ? `${Math.round(total)}m` : `${total.toFixed(0)}km`;
+    };
+    const bestDist = (disc, unit) => {
+      const arr = us.filter(s => s.discipline === disc && s.distance).map(s => parseFloat(s.distance));
+      if (!arr.length) return "—";
+      const best = Math.max(...arr);
+      return unit === "m" ? `${best}m` : `${best}km`;
+    };
+
+    return { seancesPerWeek, avgRpe, totalSess,
+      bike: dist("Vélo", "km"), bestBike: bestDist("Vélo", "km"),
+      run: dist("Course à pied", "km"), bestRun: bestDist("Course à pied", "km"),
+      swim: dist("Natation", "m"), bestSwim: bestDist("Natation", "m"),
+    };
   };
 
-  const ls = stats("louis");
-  const rs = stats("romain");
+  const ls = tableStats("louis");
+  const rs = tableStats("romain");
+
+  // ── Shared chart style ──
+  const chartProps = {
+    margin: { top: 5, right: 10, left: -20, bottom: 5 },
+  };
+  const axisStyle = { tick: { fill: "#8E8E93", fontSize: 10 }, axisLine: false, tickLine: false };
+  const gridStyle = { stroke: "#2C2C2E", strokeDasharray: "4 4" };
+
+  const leader = lScore > rScore ? "louis" : rScore > lScore ? "romain" : null;
 
   return (
-    <Card>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
-        <Avatar user="louis" size={28} />
-        <span style={{ color: USERS.louis.color }}>Louis</span>
-        <span style={{ flex: 1, textAlign: "center", color: "#555" }}>VS</span>
-        <span style={{ color: USERS.romain.color }}>Romain</span>
-        <Avatar user="romain" size={28} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+
+      {/* ── HEADER SCORE ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #0a0a0a, #111)",
+        border: "1px solid #2C2C2E", borderRadius: 20, padding: 24,
+        marginBottom: 14,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Avatar user="louis" size={40} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: USERS.louis.color }}>Louis</div>
+              <div style={{ fontSize: 11, color: "#666" }}>Athlète</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "#555", letterSpacing: 2, textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Performance</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 36, fontWeight: 900, color: USERS.louis.color, fontFamily: "monospace" }}>{lScore}</span>
+              <span style={{ fontSize: 20, color: "#333", fontWeight: 900 }}>VS</span>
+              <span style={{ fontSize: 36, fontWeight: 900, color: USERS.romain.color, fontFamily: "monospace" }}>{rScore}</span>
+            </div>
+            {leader && (
+              <div style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                <Trophy size={12} color="#FFD60A" />
+                <span style={{ fontSize: 11, color: "#FFD60A", fontWeight: 700 }}>{USERS[leader].name} mène</span>
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexDirection: "row-reverse" }}>
+            <Avatar user="romain" size={40} />
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: USERS.romain.color }}>Romain</div>
+              <div style={{ fontSize: 11, color: "#666" }}>Athlète</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Score bars */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {radarData.map(r => {
+            const total = (r.louis || 0) + (r.romain || 0);
+            const lPct = total ? (r.louis / total) * 100 : 50;
+            const winner = r.louis > r.romain ? "louis" : r.romain > r.louis ? "romain" : null;
+            return (
+              <div key={r.axis}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#8E8E93", marginBottom: 4, fontFamily: "monospace" }}>
+                  <span style={{ color: USERS.louis.color, fontWeight: winner === "louis" ? 800 : 400 }}>{r.louis}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {winner && <span style={{ color: USERS[winner].color, fontSize: 9 }}>▲</span>}
+                    {r.axis}
+                  </span>
+                  <span style={{ color: USERS.romain.color, fontWeight: winner === "romain" ? 800 : 400 }}>{r.romain}</span>
+                </div>
+                <div style={{ height: 5, background: "#1C1C1E", borderRadius: 99, overflow: "hidden", display: "flex" }}>
+                  <div style={{ width: `${lPct}%`, background: `linear-gradient(90deg, ${USERS.louis.color}88, ${USERS.louis.color})`, transition: "width 0.6s" }} />
+                  <div style={{ flex: 1, background: `linear-gradient(90deg, ${USERS.romain.color}, ${USERS.romain.color}88)` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {DISCIPLINES.slice(0, 4).map(d => {
-          const lm = ls[d].minutes, rm = rs[d].minutes;
-          const total = lm + rm;
-          const lpct = total ? (lm / total) * 100 : 50;
-          const winner = lm > rm ? "louis" : rm > lm ? "romain" : null;
-          return (
-            <div key={d}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, color: "#aaa" }}>
-                <span style={{ color: USERS.louis.color }}>{lm}min</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{getDiscIcon(d, 16)} {d} {winner && <span style={{ color: USERS[winner].color }}>←</span>}</span>
-                <span style={{ color: USERS.romain.color }}>{rm}min</span>
-              </div>
-              <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", display: "flex" }}>
-                <div style={{ width: `${lpct}%`, background: USERS.louis.color, transition: "width 0.5s" }} />
-                <div style={{ flex: 1, background: USERS.romain.color }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* ── RADAR ── */}
+      <Card style={{ marginBottom: 14 }}>
+        <SectionLabel icon={<Activity size={16} />} title="Profil athlète — Radar" />
+        <ResponsiveContainer width="100%" height={260}>
+          <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
+            <PolarGrid stroke="#2C2C2E" />
+            <PolarAngleAxis
+              dataKey="axis"
+              tick={{ fill: "#8E8E93", fontSize: 11, fontFamily: "monospace" }}
+            />
+            <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+            <Radar name="Louis" dataKey="louis" stroke={USERS.louis.color} fill={USERS.louis.color} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: USERS.louis.color }} />
+            <Radar name="Romain" dataKey="romain" stroke={USERS.romain.color} fill={USERS.romain.color} fillOpacity={0.15} strokeWidth={2} dot={{ r: 3, fill: USERS.romain.color }} />
+            <Legend
+              wrapperStyle={{ fontSize: 12, paddingTop: 10 }}
+              formatter={(val, entry) => <span style={{ color: entry.color, fontWeight: 700 }}>{val}</span>}
+            />
+            <Tooltip content={<DarkTooltip />} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </Card>
 
-      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {["louis", "romain"].map(uid => {
-          const total = weekSessions.filter(s => s.user === uid).length;
-          const avgRpe = weekSessions.filter(s => s.user === uid && s.rpe).reduce((a, s, _, arr) => a + +s.rpe / arr.length, 0);
-          return (
-            <div key={uid} style={{
-              padding: "12px", background: `${USERS[uid].color}0a`,
-              border: `1px solid ${USERS[uid].color}22`, borderRadius: 10, textAlign: "center",
-            }}>
-              <Avatar user={uid} size={32} />
-              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, color: USERS[uid].color }}>{total}</div>
-              <div style={{ fontSize: 11, color: "#888" }}>séances cette semaine</div>
-              {avgRpe > 0 && <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>RPE moyen {avgRpe.toFixed(1)}</div>}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
+      {/* ── LINE CHARTS ── */}
+      {[
+        { data: bikeData,  title: "Vélo — distance (km)", icon: <Bike size={16} />, unit: "km" },
+        { data: runData,   title: "Course à pied — distance (km)", icon: <Footprints size={16} />, unit: "km" },
+        { data: swimData,  title: "Natation — distance (m)", icon: <Waves size={16} />, unit: "m" },
+      ].map(({ data, title, icon, unit }) => (
+        <Card key={title} style={{ marginBottom: 14 }}>
+          <SectionLabel icon={icon} title={title} />
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={data} {...chartProps}>
+              <CartesianGrid {...gridStyle} />
+              <XAxis dataKey="semaine" {...axisStyle} />
+              <YAxis {...axisStyle} />
+              <Tooltip content={<DarkTooltip />} />
+              <Line type="monotone" dataKey="Louis" stroke={USERS.louis.color} strokeWidth={2}
+                dot={{ r: 3, fill: USERS.louis.color }} activeDot={{ r: 5 }} unit={unit} />
+              <Line type="monotone" dataKey="Romain" stroke={USERS.romain.color} strokeWidth={2}
+                dot={{ r: 3, fill: USERS.romain.color }} activeDot={{ r: 5 }} unit={unit} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      ))}
+
+      {/* ── STATS TABLE ── */}
+      <Card>
+        <SectionLabel icon={<TrendingUp size={16} />} title="Statistiques globales" />
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr>
+                {["Métrique", "Louis", "Romain"].map((h, i) => (
+                  <th key={h} style={{
+                    padding: "8px 10px", textAlign: i === 0 ? "left" : "center",
+                    color: i === 0 ? "#8E8E93" : USERS[h.toLowerCase()]?.color || "#fff",
+                    fontFamily: "monospace", letterSpacing: 1, fontSize: 11,
+                    borderBottom: "1px solid #2C2C2E", fontWeight: 700,
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: "Séances / semaine", l: ls.seancesPerWeek, r: rs.seancesPerWeek, higherIsBetter: true },
+                { label: "Total séances", l: ls.totalSess, r: rs.totalSess, higherIsBetter: true },
+                { label: "RPE moyen", l: ls.avgRpe, r: rs.avgRpe, higherIsBetter: false },
+                { label: "Total vélo", l: ls.bike, r: rs.bike },
+                { label: "Meilleure sortie vélo", l: ls.bestBike, r: rs.bestBike },
+                { label: "Total course", l: ls.run, r: rs.run },
+                { label: "Meilleure sortie course", l: ls.bestRun, r: rs.bestRun },
+                { label: "Total natation", l: ls.swim, r: rs.swim },
+                { label: "Meilleure sortie natation", l: ls.bestSwim, r: rs.bestSwim },
+              ].map((row, i) => {
+                const lNum = parseFloat(row.l);
+                const rNum = parseFloat(row.r);
+                const lWins = row.higherIsBetter != null
+                  ? (row.higherIsBetter ? lNum > rNum : lNum < rNum)
+                  : false;
+                const rWins = row.higherIsBetter != null
+                  ? (row.higherIsBetter ? rNum > lNum : rNum < lNum)
+                  : false;
+                return (
+                  <tr key={row.label} style={{ background: i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
+                    <td style={{ padding: "9px 10px", color: "#8E8E93", fontFamily: "monospace", fontSize: 11 }}>{row.label}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "center", color: lWins ? USERS.louis.color : "#ccc", fontWeight: lWins ? 800 : 400 }}>
+                      {lWins && <span style={{ marginRight: 4, fontSize: 9 }}>▲</span>}{row.l}
+                    </td>
+                    <td style={{ padding: "9px 10px", textAlign: "center", color: rWins ? USERS.romain.color : "#ccc", fontWeight: rWins ? 800 : 400 }}>
+                      {rWins && <span style={{ marginRight: 4, fontSize: 9 }}>▲</span>}{row.r}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Score final */}
+        <div style={{
+          marginTop: 20, padding: "16px", borderRadius: 14,
+          background: leader ? `linear-gradient(135deg, ${USERS[leader].color}0d, ${USERS[leader].color}06)` : "rgba(255,255,255,0.03)",
+          border: leader ? `1px solid ${USERS[leader].color}33` : "1px solid #2C2C2E",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+        }}>
+          <Award size={20} color="#FFD60A" />
+          <span style={{ fontSize: 13, color: "#ddd" }}>Score global :</span>
+          <span style={{ fontSize: 18, fontWeight: 900, color: USERS.louis.color, fontFamily: "monospace" }}>{lScore}</span>
+          <span style={{ color: "#444", fontWeight: 700 }}>vs</span>
+          <span style={{ fontSize: 18, fontWeight: 900, color: USERS.romain.color, fontFamily: "monospace" }}>{rScore}</span>
+          {leader && (
+            <span style={{ fontSize: 12, color: USERS[leader].color, fontWeight: 700 }}>
+              — {USERS[leader].name} en tête 🏆
+            </span>
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -850,14 +1135,17 @@ function SessionHistory({ user, sessions, setSessions }) {
 
 // ─── AI CHAT ─────────────────────────────────────────────────────────────────
 function AIChat({ user, sessions, wellness }) {
-  const [messages, setMessages] = useState([{
+  const welcomeMessage = (u) => ({
     role: "assistant",
-    content: `Salut ${USERS[user].name} ! 👋 Je suis ton coach IA. J'ai accès à tout ton historique. Pose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...`,
-  }]);
+    content: `Salut ${USERS[u].name} ! 👋 Je suis ton coach IA. J'ai accès à tout ton historique. Pose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...`,
+  });
+
+  const [messages, setMessages] = useState([welcomeMessage(user)]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef();
 
+  useEffect(() => { setMessages([welcomeMessage(user)]); }, [user]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function send() {
