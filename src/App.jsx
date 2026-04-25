@@ -12,6 +12,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer
 } from "recharts";
+import { supabase } from "./supabase.js";
 
 // ─── ANTHROPIC API ───────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, userMessage, history = []) {
@@ -2197,6 +2198,8 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
 function HistoriquePage({ user, sessions, setSessions, wellness }) {
   const [filter, setFilter] = useState("Toutes");
   const [selected, setSelected] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const allDisc = ["Toutes", ...DISCIPLINES];
 
@@ -2205,6 +2208,24 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const color = USERS[user].color;
+
+  async function handleDelete(e, id) {
+    e.stopPropagation();
+    if (confirmId !== id) { setConfirmId(id); return; }
+    setDeleting(id);
+    setConfirmId(null);
+    try {
+      await supabase.from("sessions").delete().eq("id", id);
+    } catch (_) { /* silent — local delete proceeds regardless */ }
+    setSessions(prev => prev.filter(s => s.id !== id));
+    if (selected?.id === id) setSelected(null);
+    setDeleting(null);
+  }
+
+  function cancelConfirm(e, id) {
+    e.stopPropagation();
+    if (confirmId === id) setConfirmId(null);
+  }
 
   const subInfo = (s) => {
     if (s.distance) return `${s.distance}${s.distanceUnit || ""}`;
@@ -2244,7 +2265,6 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
           marginLeft: -16, marginRight: -16, paddingLeft: 16,
           display: "flex", gap: 8, overflowX: "auto",
         }}>
-          <style>{`.hist-filter::-webkit-scrollbar{display:none}`}</style>
           {allDisc.map(d => (
             <button key={d} onClick={() => setFilter(d)} style={{
               flexShrink: 0, padding: "6px 14px", borderRadius: 99, border: "none",
@@ -2290,45 +2310,88 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
               );
               const s = item.data;
               const sub = subInfo(s);
+              const isPending = confirmId === s.id;
+              const isDeleting = deleting === s.id;
+
               return (
-                <button key={s.id} onClick={() => setSelected(s)} style={{
+                <div key={s.id} style={{
                   display: "flex", alignItems: "center", gap: 12,
-                  background: "none", border: "none", borderBottom: "1px solid #1C1C1E",
-                  padding: "12px 0", cursor: "pointer", textAlign: "left", width: "100%",
-                  fontFamily: "inherit",
-                  transition: "background 0.1s",
+                  borderBottom: "1px solid #1C1C1E", padding: "12px 0",
+                  opacity: isDeleting ? 0.4 : 1, transition: "opacity 0.2s",
                 }}>
-                  {/* Disc icon */}
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 13, flexShrink: 0,
-                    background: `${color}14`, border: `1px solid ${color}2a`,
-                    display: "flex", alignItems: "center", justifyContent: "center", color,
+                  {/* Clickable main area */}
+                  <button onClick={() => { setConfirmId(null); setSelected(s); }} style={{
+                    display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0,
+                    background: "none", border: "none", cursor: "pointer",
+                    textAlign: "left", fontFamily: "inherit", padding: 0,
                   }}>
-                    {getDiscIcon(s.discipline, 20)}
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{s.discipline}</div>
-                    <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <span>{new Date(s.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
-                      <span style={{ color: "#444" }}>·</span>
-                      <span>{s.duration} min</span>
-                      {sub && <><span style={{ color: "#444" }}>·</span><span>{sub}</span></>}
+                    {/* Disc icon */}
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 13, flexShrink: 0,
+                      background: `${color}14`, border: `1px solid ${color}2a`,
+                      display: "flex", alignItems: "center", justifyContent: "center", color,
+                    }}>
+                      {getDiscIcon(s.discipline, 20)}
                     </div>
-                  </div>
 
-                  {/* RPE badge + chevron */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {s.rpe && (
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{s.discipline}</div>
+                      <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span>{new Date(s.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
+                        <span style={{ color: "#444" }}>·</span>
+                        <span>{s.duration} min</span>
+                        {sub && <><span style={{ color: "#444" }}>·</span><span>{sub}</span></>}
+                      </div>
+                    </div>
+
+                    {/* RPE badge */}
+                    {s.rpe && !isPending && (
                       <div style={{
                         background: `${rpeColor(s.rpe)}15`, border: `1px solid ${rpeColor(s.rpe)}44`,
-                        borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: rpeColor(s.rpe),
+                        borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 700,
+                        color: rpeColor(s.rpe), flexShrink: 0,
                       }}>RPE {s.rpe}</div>
                     )}
-                    <ChevronRight size={16} color="#333" />
+
+                    {!isPending && <ChevronRight size={16} color="#333" style={{ flexShrink: 0 }} />}
+                  </button>
+
+                  {/* Delete / confirm area */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    {isPending ? (
+                      <>
+                        <button onClick={e => handleDelete(e, s.id)} style={{
+                          padding: "5px 10px", borderRadius: 8, border: "none",
+                          background: "#FF3B3020", color: "#FF3B30",
+                          fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                          display: "flex", alignItems: "center", gap: 4,
+                        }}>
+                          <Trash2 size={12} /> Supprimer
+                        </button>
+                        <button onClick={e => cancelConfirm(e, s.id)} style={{
+                          padding: "5px 10px", borderRadius: 8, border: "none",
+                          background: "#2C2C2E", color: "#8E8E93",
+                          fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                        }}>
+                          Annuler
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={e => handleDelete(e, s.id)} disabled={isDeleting} style={{
+                        width: 32, height: 32, borderRadius: 8, border: "none",
+                        background: "transparent", color: "#3C3C3E",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 0.15s",
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.color = "#FF3B30"}
+                        onMouseLeave={e => e.currentTarget.style.color = "#3C3C3E"}
+                      >
+                        {isDeleting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />}
+                      </button>
+                    )}
                   </div>
-                </button>
+                </div>
               );
             })}
             <div style={{ height: 8 }} />
