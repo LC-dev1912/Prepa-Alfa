@@ -35,13 +35,13 @@ async function callClaude(systemPrompt, userMessage, history = []) {
 const USERS = {
   louis: {
     name: "Louis",
-    color: "#007AFF", // Apple blue
+    color: "#FC4C02", // Apple blue
     avatar: "L",
     profile: "Pratique la musculation depuis 3 ans, régulier depuis 1 an (4x/sem min). Bonne base de force. Ne court pas. Sait nager. Prévoit d'acheter un vélo de route.",
   },
   romain: {
     name: "Romain",
-    color: "#FF3B30", // Apple red/orange
+    color: "#3B82F6", // Apple red/orange
     avatar: "R",
     profile: "Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT, prévoit d'acheter un vélo de route.",
   },
@@ -208,13 +208,13 @@ function Countdown() {
   const days = daysUntilRace();
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px",
+      display: "flex", alignItems: "center", gap: 10, background: "#FC4C0210",
+      border: "1px solid #FC4C0230", borderRadius: 10, padding: "8px 14px",
     }}>
       <span style={{ fontSize: 22 }}>🏁</span>
       <div>
-        <div style={{ fontSize: 11, color: "#888", fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }}>Jour J</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: "#00d4ff", fontFamily: "monospace" }}>
+        <div style={{ fontSize: 11, color: "#6B7280", fontFamily: "monospace", letterSpacing: 2, textTransform: "uppercase" }}>Jour J</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: "#FC4C02", fontFamily: "monospace" }}>
           J-{days}
         </div>
       </div>
@@ -234,10 +234,10 @@ function Avatar({ user, size = 36 }) {
   );
 }
 
-function ProgressBar({ value, max, color = "#00d4ff", height = 6 }) {
+function ProgressBar({ value, max, color = "#FC4C02", height = 6 }) {
   const pct = Math.min(100, (value / max) * 100);
   return (
-    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height, overflow: "hidden" }}>
+    <div style={{ background: "#E8EAED", borderRadius: 99, height, overflow: "hidden" }}>
       <div style={{
         width: `${pct}%`, height: "100%", borderRadius: 99,
         background: `linear-gradient(90deg, ${color}99, ${color})`,
@@ -250,13 +250,15 @@ function ProgressBar({ value, max, color = "#00d4ff", height = 6 }) {
 function Card({ children, style = {} }) {
   return (
     <div style={{
-      background: "#1C1C1E", border: "1px solid #2C2C2E",
-      borderRadius: 16, padding: 20, ...style,
+      background: "#FFFFFF", border: "1px solid #E8EAED",
+      borderRadius: 12, padding: 20,
+      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      ...style,
     }}>{children}</div>
   );
 }
 
-function Badge({ children, color = "#007AFF" }) {
+function Badge({ children, color = "#FC4C02" }) {
   return (
     <span style={{
       background: `${color}1A`, color, border: `1px solid ${color}33`,
@@ -325,13 +327,13 @@ function SessionForm({ user, sessions, setSessions, onAnalyze }) {
 
   const inp = (extra = {}) => ({
     style: {
-      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-      borderRadius: 8, color: "#fff", padding: "10px 14px", fontSize: 14, width: "100%",
+      background: "#F5F7FA", border: "1px solid #E2E5EA",
+      borderRadius: 8, color: "#1A1A1A", padding: "10px 14px", fontSize: 14, width: "100%",
       outline: "none", fontFamily: "inherit", ...extra.style,
     }, ...extra,
   });
   const label = (txt) => (
-    <div style={{ fontSize: 11, color: "#888", marginBottom: 6, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{txt}</div>
+    <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{txt}</div>
   );
 
   const disc = form.discipline;
@@ -507,7 +509,7 @@ function SessionForm({ user, sessions, setSessions, onAnalyze }) {
           </datalist>
           {form.exercises.map((ex, ei) => (
             <div key={ei} style={{
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+              background: "#F8F9FA", border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 12, padding: 14, marginBottom: 10,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -523,23 +525,23 @@ function SessionForm({ user, sessions, setSessions, onAnalyze }) {
                 placeholder="Nom de l'exercice" {...inp({ style: { marginBottom: 10, width: "100%" } })} />
               {ex.sets.map((s, si) => (
                 <div key={si} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: "#666", fontFamily: "monospace", minWidth: 24 }}>S{si + 1}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace", minWidth: 24 }}>S{si + 1}</span>
                   <input type="number" value={s.weight} onChange={e => updateSet(ei, si, "weight", e.target.value)}
                     placeholder="kg" {...inp({ style: { width: 70, padding: "7px 10px", fontSize: 13 } })} />
-                  <span style={{ color: "#555", fontSize: 13 }}>kg ×</span>
+                  <span style={{ color: "#9CA3AF", fontSize: 13 }}>kg ×</span>
                   <input type="number" value={s.reps} onChange={e => updateSet(ei, si, "reps", e.target.value)}
                     placeholder="reps" {...inp({ style: { width: 70, padding: "7px 10px", fontSize: 13 } })} />
-                  <span style={{ color: "#555", fontSize: 13 }}>reps</span>
+                  <span style={{ color: "#9CA3AF", fontSize: 13 }}>reps</span>
                   {ex.sets.length > 1 && (
                     <button onClick={() => removeSet(ei, si)} style={{
-                      background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, padding: "0 4px",
+                      background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 14, padding: "0 4px",
                     }}>✕</button>
                   )}
                 </div>
               ))}
               <button onClick={() => addSet(ei)} style={{
-                background: "rgba(255,255,255,0.05)", border: "1px dashed rgba(255,255,255,0.15)",
-                borderRadius: 6, color: "#888", cursor: "pointer", padding: "5px 12px", fontSize: 12,
+                background: "#F5F7FA", border: "1px dashed #D0D5DD",
+                borderRadius: 6, color: "#6B7280", cursor: "pointer", padding: "5px 12px", fontSize: 12,
                 fontFamily: "inherit", marginTop: 4, width: "100%",
               }}>+ Série</button>
             </div>
@@ -554,11 +556,11 @@ function SessionForm({ user, sessions, setSessions, onAnalyze }) {
 
       {lastSame && (
         <div style={{
-          marginTop: 14, padding: "12px 16px", background: "rgba(255,255,255,0.04)",
+          marginTop: 14, padding: "12px 16px", background: "#F8F9FA",
           borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)",
           display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13,
         }}>
-          <span style={{ color: "#888" }}>Dernière {form.discipline} :</span>
+          <span style={{ color: "#6B7280" }}>Dernière {form.discipline} :</span>
           <span>⏱ {lastSame.duration} min</span>
           {lastSame.distance && <span>📏 {lastSame.distance}{lastSame.distanceUnit}</span>}
           {lastSame.allure && <span>⚡ {lastSame.allure}</span>}
@@ -602,7 +604,7 @@ function WellnessForm({ user, wellness, setWellness }) {
   const Slider = ({ label, val, setVal }) => (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 12, color: "#888", letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{label}</span>
+        <span style={{ fontSize: 12, color: "#6B7280", letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace" }}>{label}</span>
       </div>
       <input type="range" min="1" max="5" value={val} onChange={e => { setVal(+e.target.value); setSaved(false); }}
         style={{ width: "100%", accentColor: USERS[user].color }} />
@@ -732,10 +734,10 @@ const DarkTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
-      background: "#1C1C1E", border: "1px solid #3C3C3E", borderRadius: 10,
-      padding: "10px 14px", fontSize: 12,
+      background: "#FFFFFF", border: "1px solid #E8EAED", borderRadius: 10,
+      padding: "10px 14px", fontSize: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
     }}>
-      <div style={{ color: "#8E8E93", marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ color: "#6B7280", marginBottom: 6, fontWeight: 600 }}>{label}</div>
       {payload.map((p, i) => (
         <div key={i} style={{ color: p.color, fontWeight: 700 }}>
           {p.name}: {p.value}{p.unit || ""}
@@ -748,7 +750,7 @@ const DarkTooltip = ({ active, payload, label }) => {
 function SectionLabel({ icon, title }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-      <span style={{ color: "#8E8E93" }}>{icon}</span>
+      <span style={{ color: "#6B7280" }}>{icon}</span>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#EBEBF5", letterSpacing: 0.5, textTransform: "uppercase", fontFamily: "monospace" }}>{title}</span>
     </div>
   );
@@ -830,7 +832,7 @@ function DuelDashboard({ sessions, wellness }) {
     margin: { top: 5, right: 10, left: -20, bottom: 5 },
   };
   const axisStyle = { tick: { fill: "#8E8E93", fontSize: 10 }, axisLine: false, tickLine: false };
-  const gridStyle = { stroke: "#2C2C2E", strokeDasharray: "4 4" };
+  const gridStyle = { stroke: "#E5E7EB", strokeDasharray: "3 3" };
 
   const leader = lScore > rScore ? "louis" : rScore > lScore ? "romain" : null;
 
@@ -839,23 +841,23 @@ function DuelDashboard({ sessions, wellness }) {
 
       {/* ── HEADER SCORE ── */}
       <div style={{
-        background: "linear-gradient(135deg, #0a0a0a, #111)",
-        border: "1px solid #2C2C2E", borderRadius: 20, padding: 24,
-        marginBottom: 14,
+        background: "linear-gradient(135deg, #FFFFFF, #F8F9FA)",
+        border: "1px solid #E8EAED", borderRadius: 16, padding: 24,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 14,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Avatar user="louis" size={40} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: USERS.louis.color }}>Louis</div>
-              <div style={{ fontSize: 11, color: "#666" }}>Athlète</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF" }}>Athlète</div>
             </div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "#555", letterSpacing: 2, textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Performance</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", letterSpacing: 2, textTransform: "uppercase", fontFamily: "monospace", marginBottom: 4 }}>Performance</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 36, fontWeight: 900, color: USERS.louis.color, fontFamily: "monospace" }}>{lScore}</span>
-              <span style={{ fontSize: 20, color: "#333", fontWeight: 900 }}>VS</span>
+              <span style={{ fontSize: 20, color: "#1A1A1A", fontWeight: 900 }}>VS</span>
               <span style={{ fontSize: 36, fontWeight: 900, color: USERS.romain.color, fontFamily: "monospace" }}>{rScore}</span>
             </div>
             {leader && (
@@ -869,7 +871,7 @@ function DuelDashboard({ sessions, wellness }) {
             <Avatar user="romain" size={40} />
             <div style={{ textAlign: "right" }}>
               <div style={{ fontWeight: 800, fontSize: 16, color: USERS.romain.color }}>Romain</div>
-              <div style={{ fontSize: 11, color: "#666" }}>Athlète</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF" }}>Athlète</div>
             </div>
           </div>
         </div>
@@ -882,7 +884,7 @@ function DuelDashboard({ sessions, wellness }) {
             const winner = r.louis > r.romain ? "louis" : r.romain > r.louis ? "romain" : null;
             return (
               <div key={r.axis}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#8E8E93", marginBottom: 4, fontFamily: "monospace" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>
                   <span style={{ color: USERS.louis.color, fontWeight: winner === "louis" ? 800 : 400 }}>{r.louis}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     {winner && <span style={{ color: USERS[winner].color, fontSize: 9 }}>▲</span>}
@@ -890,7 +892,7 @@ function DuelDashboard({ sessions, wellness }) {
                   </span>
                   <span style={{ color: USERS.romain.color, fontWeight: winner === "romain" ? 800 : 400 }}>{r.romain}</span>
                 </div>
-                <div style={{ height: 5, background: "#1C1C1E", borderRadius: 99, overflow: "hidden", display: "flex" }}>
+                <div style={{ height: 5, background: "#E8EAED", borderRadius: 99, overflow: "hidden", display: "flex" }}>
                   <div style={{ width: `${lPct}%`, background: `linear-gradient(90deg, ${USERS.louis.color}88, ${USERS.louis.color})`, transition: "width 0.6s" }} />
                   <div style={{ flex: 1, background: `linear-gradient(90deg, ${USERS.romain.color}, ${USERS.romain.color}88)` }} />
                 </div>
@@ -905,7 +907,7 @@ function DuelDashboard({ sessions, wellness }) {
         <SectionLabel icon={<Activity size={16} />} title="Profil athlète — Radar" />
         <ResponsiveContainer width="100%" height={260}>
           <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
-            <PolarGrid stroke="#2C2C2E" />
+            <PolarGrid stroke="#E8EAED" />
             <PolarAngleAxis
               dataKey="axis"
               tick={{ fill: "#8E8E93", fontSize: 11, fontFamily: "monospace" }}
@@ -957,7 +959,7 @@ function DuelDashboard({ sessions, wellness }) {
                     padding: "8px 10px", textAlign: i === 0 ? "left" : "center",
                     color: i === 0 ? "#8E8E93" : USERS[h.toLowerCase()]?.color || "#fff",
                     fontFamily: "monospace", letterSpacing: 1, fontSize: 11,
-                    borderBottom: "1px solid #2C2C2E", fontWeight: 700,
+                    borderBottom: "1px solid #E8EAED", fontWeight: 700,
                   }}>{h}</th>
                 ))}
               </tr>
@@ -984,7 +986,7 @@ function DuelDashboard({ sessions, wellness }) {
                   : false;
                 return (
                   <tr key={row.label} style={{ background: i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
-                    <td style={{ padding: "9px 10px", color: "#8E8E93", fontFamily: "monospace", fontSize: 11 }}>{row.label}</td>
+                    <td style={{ padding: "9px 10px", color: "#6B7280", fontFamily: "monospace", fontSize: 11 }}>{row.label}</td>
                     <td style={{ padding: "9px 10px", textAlign: "center", color: lWins ? USERS.louis.color : "#ccc", fontWeight: lWins ? 800 : 400 }}>
                       {lWins && <span style={{ marginRight: 4, fontSize: 9 }}>▲</span>}{row.l}
                     </td>
@@ -1002,11 +1004,11 @@ function DuelDashboard({ sessions, wellness }) {
         <div style={{
           marginTop: 20, padding: "16px", borderRadius: 14,
           background: leader ? `linear-gradient(135deg, ${USERS[leader].color}0d, ${USERS[leader].color}06)` : "rgba(255,255,255,0.03)",
-          border: leader ? `1px solid ${USERS[leader].color}33` : "1px solid #2C2C2E",
+          border: leader ? `1px solid ${USERS[leader].color}33` : "1px solid #E8EAED",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
         }}>
           <Award size={20} color="#FFD60A" />
-          <span style={{ fontSize: 13, color: "#ddd" }}>Score global :</span>
+          <span style={{ fontSize: 13, color: "#374151" }}>Score global :</span>
           <span style={{ fontSize: 18, fontWeight: 900, color: USERS.louis.color, fontFamily: "monospace" }}>{lScore}</span>
           <span style={{ color: "#444", fontWeight: 700 }}>vs</span>
           <span style={{ fontSize: 18, fontWeight: 900, color: USERS.romain.color, fontFamily: "monospace" }}>{rScore}</span>
@@ -1056,31 +1058,31 @@ function SessionHistory({ user, sessions, setSessions }) {
     return null;
   };
 
-  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+  const inp = { background: "#F5F7FA", border: "1px solid #E2E5EA",
+    borderRadius: 8, color: "#1A1A1A", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
 
   return (
     <Card>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
         <FileText size={18} /> Historique — <span style={{ color: USERS[user].color }}>{USERS[user].name}</span>
       </div>
-      {userSessions.length === 0 && <div style={{ color: "#555", fontSize: 14 }}>Aucune séance enregistrée.</div>}
+      {userSessions.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 14 }}>Aucune séance enregistrée.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {userSessions.map(s => (
           <div key={s.id} style={{
             display: "flex", gap: 10, alignItems: "center",
-            padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 10, fontSize: 13,
+            padding: "10px 12px", background: "#F8F9FA", borderRadius: 10, fontSize: 13,
           }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "rgba(255,255,255,0.05)", borderRadius: 12, color: USERS[user].color }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "#F5F5F5", borderRadius: 12, color: USERS[user].color }}>
               {getDiscIcon(s.discipline, 20)}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600 }}>{s.discipline}</div>
-              <div style={{ color: "#888", fontSize: 11 }}>{s.date}{subType(s) ? ` · ${subType(s)}` : ""}</div>
+              <div style={{ color: "#6B7280", fontSize: 11 }}>{s.date}{subType(s) ? ` · ${subType(s)}` : ""}</div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontWeight: 700 }}>{s.duration} min</div>
-              {detail(s) && <div style={{ color: "#888", fontSize: 11 }}>{detail(s)}</div>}
+              {detail(s) && <div style={{ color: "#6B7280", fontSize: 11 }}>{detail(s)}</div>}
             </div>
             <Badge color={USERS[user].color}>RPE {s.rpe}</Badge>
             <button onClick={() => startEdit(s)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }}>✏️</button>
@@ -1092,37 +1094,37 @@ function SessionHistory({ user, sessions, setSessions }) {
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100,
           display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+          <div style={{ background: "#FFFFFF", border: "1px solid #E8EAED", borderRadius: 20,
             padding: 24, maxWidth: 420, width: "100%" }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
               <Edit2 size={18} /> Modifier la séance
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DATE</div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>DATE</div>
                 <input type="date" value={editForm.date || ""} onChange={e => ef("date", e.target.value)} style={inp} />
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DURÉE (MIN)</div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>DURÉE (MIN)</div>
                 <input type="number" value={editForm.duration || ""} onChange={e => ef("duration", e.target.value)} style={inp} />
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>DISTANCE</div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>DISTANCE</div>
                 <input type="number" value={editForm.distance || ""} onChange={e => ef("distance", e.target.value)} style={inp} />
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>RPE</div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>RPE</div>
                 <input type="number" min="1" max="10" value={editForm.rpe || ""} onChange={e => ef("rpe", e.target.value)} style={inp} />
               </div>
               <div style={{ gridColumn: "1/-1" }}>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontFamily: "monospace" }}>NOTES</div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4, fontFamily: "monospace" }}>NOTES</div>
                 <textarea value={editForm.notes || ""} onChange={e => ef("notes", e.target.value)} rows={2}
                   style={{ ...inp, resize: "vertical" }} />
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditing(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#888",
+                border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#6B7280",
                 cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>Annuler</button>
               <button onClick={saveEdit} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
                 background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`,
@@ -1180,7 +1182,7 @@ function AIChat({ user, sessions, wellness }) {
             maxWidth: "85%",
             background: m.role === "user"
               ? `linear-gradient(135deg, ${USERS[user].color}33, ${USERS[user].color}22)`
-              : "rgba(255,255,255,0.05)",
+              : "#F5F5F5",
             border: `1px solid ${m.role === "user" ? USERS[user].color + "44" : "rgba(255,255,255,0.08)"}`,
             borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
             padding: "10px 14px", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap",
@@ -1189,7 +1191,7 @@ function AIChat({ user, sessions, wellness }) {
           </div>
         ))}
         {loading && (
-          <div style={{ alignSelf: "flex-start", padding: "10px 14px", background: "rgba(255,255,255,0.05)", borderRadius: 16, fontSize: 13, color: "#8E8E93", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ alignSelf: "flex-start", padding: "10px 14px", background: "#F5F5F5", borderRadius: 16, fontSize: 13, color: "#6B7280", display: "flex", alignItems: "center", gap: 8 }}>
             <Loader2 size={16} className="animate-spin" /> Le coach analyse...
           </div>
         )}
@@ -1201,8 +1203,8 @@ function AIChat({ user, sessions, wellness }) {
           onKeyDown={e => e.key === "Enter" && send()}
           placeholder="Pose ta question..."
           style={{
-            flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10, color: "#fff", padding: "10px 14px", fontSize: 14, outline: "none", fontFamily: "inherit",
+            flex: 1, background: "#F5F7FA", border: "1px solid #E2E5EA",
+            borderRadius: 10, color: "#1A1A1A", padding: "10px 14px", fontSize: 14, outline: "none", fontFamily: "inherit",
           }}
         />
         <button onClick={send} disabled={loading || !input.trim()}
@@ -1226,16 +1228,16 @@ function AIAnalysisPopup({ analysis, onClose }) {
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
       <div style={{
-        background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+        background: "#FFFFFF", border: "1px solid #E8EAED", borderRadius: 20,
         padding: 28, maxWidth: 500, width: "100%", position: "relative",
       }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
           <Bot size={20} /> Analyse du coach IA
         </div>
-        <div style={{ fontSize: 14, lineHeight: 1.7, color: "#ddd", whiteSpace: "pre-wrap" }}>{analysis}</div>
+        <div style={{ fontSize: 14, lineHeight: 1.7, color: "#374151", whiteSpace: "pre-wrap" }}>{analysis}</div>
         <button onClick={onClose} style={{
           marginTop: 20, width: "100%", padding: "11px 0", borderRadius: 10, border: "none",
-          background: "rgba(255,255,255,0.1)", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+          background: "#F0F0F0", color: "#1A1A1A", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         }}>Fermer</button>
       </div>
     </div>
@@ -1267,12 +1269,13 @@ function MiniStats({ user, sessions, wellness }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
       {stats.map(s => (
         <div key={s.label} style={{
-          background: "#1C1C1E", border: "1px solid #2C2C2E",
-          borderRadius: 16, padding: "16px 12px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
+          background: "#FFFFFF", border: "1px solid #E8EAED",
+          borderRadius: 12, padding: "16px 12px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.06)"
         }}>
           <div style={{ marginBottom: 6 }}>{s.icon}</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: USERS[user].color }}>{s.val}</div>
-          <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
+          <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
         </div>
       ))}
     </div>
@@ -1337,7 +1340,7 @@ Si repos, écris "Repos". Sois précis sur les durées et allures. Prends en com
                 <span style={{ fontWeight: 700, color: colors[i] }}>{p.phase}</span>
                 <Badge color={colors[i]}>Semaines {p.weeks}</Badge>
               </div>
-              <div style={{ fontSize: 13, color: "#bbb", lineHeight: 1.5 }}>{p.desc}</div>
+              <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>{p.desc}</div>
             </div>
           ))}
         </div>
@@ -1359,24 +1362,24 @@ Si repos, écris "Repos". Sois précis sur les durées et allures. Prends en com
 
         {dynamicPlan ? (
           <div>
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 12 }}>Généré le {dynamicPlan.date}</div>
+            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 12 }}>Généré le {dynamicPlan.date}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {dynamicPlan.content.split('\n').filter(l => l.trim()).map((line, i) => {
                 const parts = line.split(':');
                 const day = parts[0];
                 const rest = parts.slice(1).join(':');
-                if (!rest) return <div key={i} style={{ color: "#ddd", fontSize: 13 }}>{line}</div>;
+                if (!rest) return <div key={i} style={{ color: "#374151", fontSize: 13 }}>{line}</div>;
                 return (
-                  <div key={i} style={{ padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, fontSize: 13 }}>
+                  <div key={i} style={{ padding: "8px 12px", background: "#F8F9FA", borderRadius: 8, fontSize: 13 }}>
                     <span style={{ fontWeight: 700, color: USERS[user].color, width: 70, display: "inline-block" }}>{day}</span>
-                    <span style={{ color: "#ddd" }}>{rest}</span>
+                    <span style={{ color: "#374151" }}>{rest}</span>
                   </div>
                 );
               })}
             </div>
           </div>
         ) : (
-          <div style={{ color: "#666", fontSize: 13, textAlign: "center", padding: "10px 0" }}>
+          <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: "10px 0" }}>
             Aucun plan généré pour le moment.
           </div>
         )}
@@ -1425,17 +1428,17 @@ function PersonalRecords({ user, sessions }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
         {records.map(r => (
-          <div key={r.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
+          <div key={r.label} style={{ background: "#F8F9FA", borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
             <div style={{ fontSize: 20 }}>{r.icon}</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: USERS[user].color, marginTop: 4 }}>{r.val}</div>
-            <div style={{ fontSize: 10, color: "#888" }}>{r.label}</div>
-            {r.sub && <div style={{ fontSize: 9, color: "#666", marginTop: 2 }}>{r.sub}</div>}
+            <div style={{ fontSize: 10, color: "#6B7280" }}>{r.label}</div>
+            {r.sub && <div style={{ fontSize: 9, color: "#9CA3AF", marginTop: 2 }}>{r.sub}</div>}
           </div>
         ))}
       </div>
       {topExos.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 11, color: "#8E8E93", marginBottom: 6, fontWeight: 600, letterSpacing: 1, display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, fontWeight: 600, letterSpacing: 1, display: "flex", alignItems: "center", gap: 4 }}>
             <Dumbbell size={14} /> MAX CHARGES
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1487,8 +1490,8 @@ function Streaks({ user, sessions }) {
   if (streak >= 7) badges.push({ icon: <Flame size={14} color="#FF9500" />, label: "7j streak" });
   if (streak >= 30) badges.push({ icon: <Trophy size={14} color="#AF52DE" />, label: "30j streak" });
   if (total >= 10) badges.push({ icon: <Medal size={14} color="#FFD60A" />, label: "10 séances" });
-  if (total >= 50) badges.push({ icon: <Medal size={14} color="#FF3B30" />, label: "50 séances" });
-  if (us.some(s => s.discipline === "Course à pied" && parseFloat(s.distance) >= 5)) badges.push({ icon: <Footprints size={14} color="#007AFF" />, label: "5km ✓" });
+  if (total >= 50) badges.push({ icon: <Medal size={14} color="#3B82F6" />, label: "50 séances" });
+  if (us.some(s => s.discipline === "Course à pied" && parseFloat(s.distance) >= 5)) badges.push({ icon: <Footprints size={14} color="#FC4C02" />, label: "5km ✓" });
   if (us.some(s => s.discipline === "Natation" && parseFloat(s.distance) >= 750)) badges.push({ icon: <Waves size={14} color="#34C759" />, label: "750m ✓" });
   if (us.some(s => s.discipline === "Vélo" && parseFloat(s.distance) >= 20)) badges.push({ icon: <Bike size={14} color="#FF9500" />, label: "20km ✓" });
   if (us.some(s => s.discipline === "Brick")) badges.push({ icon: <Zap size={14} color="#FFD60A" />, label: "1er Brick" });
@@ -1503,27 +1506,27 @@ function Streaks({ user, sessions }) {
         {[
           { val: streak, label: "Streak actuel", icon: <Flame size={18} color="#FF9500" /> },
           { val: bestStreak, label: "Meilleur streak", icon: <Trophy size={18} color="#AF52DE" /> },
-          { val: total, label: "Total séances", icon: <BarChart2 size={18} color="#007AFF" /> },
+          { val: total, label: "Total séances", icon: <BarChart2 size={18} color="#FC4C02" /> },
           { val: `${Math.floor(totalMin / 60)}h`, label: "Total heures", icon: <Clock size={18} color="#34C759" /> },
         ].map(s => (
-          <div key={s.label} style={{ textAlign: "center", padding: "8px 4px", background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+          <div key={s.label} style={{ textAlign: "center", padding: "8px 4px", background: "#F8F9FA", borderRadius: 8 }}>
             <div style={{ fontSize: 16 }}>{s.icon}</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: USERS[user].color }}>{s.val}</div>
-            <div style={{ fontSize: 9, color: "#666" }}>{s.label}</div>
+            <div style={{ fontSize: 9, color: "#9CA3AF" }}>{s.label}</div>
           </div>
         ))}
       </div>
       {badges.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {badges.map(b => (
-            <span key={b.label} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+            <span key={b.label} style={{ background: "#F0F2F5", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 99, padding: "4px 10px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
               {b.icon} <span style={{ fontWeight: 600 }}>{b.label}</span>
             </span>
           ))}
         </div>
       )}
-      {badges.length === 0 && <div style={{ color: "#555", fontSize: 12 }}>Continue à t'entraîner pour débloquer des badges ! 💪</div>}
+      {badges.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>Continue à t'entraîner pour débloquer des badges ! 💪</div>}
     </Card>
   );
 }
@@ -1551,13 +1554,13 @@ function WeeklyGoals({ user, goals, setGoals, sessions }) {
   const pb = (curr, max, color) => {
     const pct = max ? Math.min((curr / max) * 100, 100) : 0;
     return (
-      <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
+      <div style={{ height: 6, background: "#F0F2F5", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width 0.5s" }} />
       </div>
     );
   };
 
-  const inp = { width: 50, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", padding: "4px 8px", borderRadius: 4, textAlign: "right", fontFamily: "inherit" };
+  const inp = { width: 50, background: "#F0F0F0", border: "1px solid #E2E5EA", color: "#1A1A1A", padding: "4px 8px", borderRadius: 4, textAlign: "right", fontFamily: "inherit" };
 
   return (
     <Card>
@@ -1572,7 +1575,7 @@ function WeeklyGoals({ user, goals, setGoals, sessions }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Calendar size={14} /> Séances ({currentCount}/{userGoals.count})</span>
             {editing && <input type="number" style={inp} value={userGoals.count} onChange={e => saveGoals({ count: +e.target.value })} />}
           </div>
@@ -1581,7 +1584,7 @@ function WeeklyGoals({ user, goals, setGoals, sessions }) {
 
         {(userGoals.distanceRun > 0 || editing) && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Footprints size={14} /> Course ({currentRun.toFixed(1)}/{userGoals.distanceRun} km)</span>
               {editing && <input type="number" style={inp} value={userGoals.distanceRun} onChange={e => saveGoals({ distanceRun: +e.target.value })} />}
             </div>
@@ -1591,7 +1594,7 @@ function WeeklyGoals({ user, goals, setGoals, sessions }) {
 
         {(userGoals.distanceBike > 0 || editing) && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Bike size={14} /> Vélo ({currentBike.toFixed(1)}/{userGoals.distanceBike} km)</span>
               {editing && <input type="number" style={inp} value={userGoals.distanceBike} onChange={e => saveGoals({ distanceBike: +e.target.value })} />}
             </div>
@@ -1601,11 +1604,11 @@ function WeeklyGoals({ user, goals, setGoals, sessions }) {
 
         {(userGoals.distanceSwim > 0 || editing) && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#8E8E93", fontWeight: 600 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Waves size={14} /> Natation ({currentSwim.toFixed(1)}/{userGoals.distanceSwim} m)</span>
               {editing && <input type="number" style={inp} value={userGoals.distanceSwim} onChange={e => saveGoals({ distanceSwim: +e.target.value })} />}
             </div>
-            {pb(currentSwim, userGoals.distanceSwim, "#00d4ff")}
+            {pb(currentSwim, userGoals.distanceSwim, "#FC4C02")}
           </div>
         )}
       </div>
@@ -1655,7 +1658,7 @@ function ProgressCharts({ user, sessions }) {
                 borderRadius: "50%", background: "#ff4d4d", zIndex: 10, transform: "translateY(50%)" }} />
             )}
 
-            <div style={{ position: "absolute", bottom: -18, fontSize: 9, color: "#888", whiteSpace: "nowrap", transform: "rotate(-45deg)", transformOrigin: "top left" }}>
+            <div style={{ position: "absolute", bottom: -18, fontSize: 9, color: "#6B7280", whiteSpace: "nowrap", transform: "rotate(-45deg)", transformOrigin: "top left" }}>
               {w.weekStr}
             </div>
           </div>
@@ -1697,8 +1700,8 @@ function ProfileSettings({ user, weightData, setWeightData, hrZones, setHrZones 
   const userW = weightData[user] || [];
   const currZones = hrZones[user] || { max: 190, z1: 114, z2: 133, z3: 152, z4: 171 };
 
-  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, flex: 1, outline: "none", fontFamily: "inherit" };
+  const inp = { background: "#F5F7FA", border: "1px solid #E2E5EA",
+    borderRadius: 8, color: "#1A1A1A", padding: "8px 12px", fontSize: 13, flex: 1, outline: "none", fontFamily: "inherit" };
   const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
     borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
 
@@ -1716,14 +1719,14 @@ function ProfileSettings({ user, weightData, setWeightData, hrZones, setHrZones 
         {userW.length > 0 ? (
           <div style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: 4, paddingBottom: 8 }}>
             {userW.slice(-10).map((w, i) => (
-              <div key={i} style={{ background: "rgba(255,255,255,0.03)", padding: "6px 10px", borderRadius: 8, textAlign: "center", minWidth: 60 }}>
+              <div key={i} style={{ background: "#F8F9FA", padding: "6px 10px", borderRadius: 8, textAlign: "center", minWidth: 60 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: USERS[user].color }}>{w.val}</div>
-                <div style={{ fontSize: 9, color: "#888" }}>{w.date.slice(5)}</div>
+                <div style={{ fontSize: 9, color: "#6B7280" }}>{w.date.slice(5)}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ fontSize: 13, color: "#666" }}>Aucune donnée.</div>
+          <div style={{ fontSize: 13, color: "#9CA3AF" }}>Aucune donnée.</div>
         )}
       </Card>
 
@@ -1733,13 +1736,13 @@ function ProfileSettings({ user, weightData, setWeightData, hrZones, setHrZones 
           <HeartPulse size={18} color="#ef4444" /> Zones de Fréquence Cardiaque
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
-          <div style={{ fontSize: 13, color: "#aaa" }}>FC Max</div>
+          <div style={{ fontSize: 13, color: "#6B7280" }}>FC Max</div>
           <input type="number" value={fcMax} onChange={e => setFcMax(e.target.value)} style={inp} />
           <button onClick={saveHr} style={btn}>Calculer</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(255,255,255,0.03)", padding: "8px", borderRadius: 6 }}>
-            <span style={{ color: "#aaa" }}>Zone 1 (Récup)</span><span>&lt; {currZones.z1} bpm</span>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "#F8F9FA", padding: "8px", borderRadius: 6 }}>
+            <span style={{ color: "#6B7280" }}>Zone 1 (Récup)</span><span>&lt; {currZones.z1} bpm</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, background: "rgba(59,130,246,0.1)", padding: "8px", borderRadius: 6 }}>
             <span style={{ color: "#3b82f6" }}>Zone 2 (Endurance)</span><span>{currZones.z1} - {currZones.z2} bpm</span>
@@ -1773,7 +1776,7 @@ function ProfileSettings({ user, weightData, setWeightData, hrZones, setHrZones 
           document.body.appendChild(link);
           link.click();
           link.remove();
-        }} style={{ ...btn, width: "100%", background: "rgba(255,255,255,0.1)", color: "#fff" }}>
+        }} style={{ ...btn, width: "100%", background: "#F0F0F0", color: "#1A1A1A" }}>
           Exporter l'historique (CSV)
         </button>
       </Card>
@@ -1796,8 +1799,8 @@ function FitnessTests({ user, tests, setTests }) {
     setEditing(false);
   };
 
-  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+  const inp = { background: "#F5F7FA", border: "1px solid #E2E5EA",
+    borderRadius: 8, color: "#1A1A1A", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
   const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
     borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" };
 
@@ -1813,7 +1816,7 @@ function FitnessTests({ user, tests, setTests }) {
       </div>
 
       {editing && (
-        <div style={{ marginBottom: 16, padding: 12, background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+        <div style={{ marginBottom: 16, padding: 12, background: "#F8F9FA", borderRadius: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
             <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} style={inp}>
               <option>VMA (km/h)</option>
@@ -1830,12 +1833,12 @@ function FitnessTests({ user, tests, setTests }) {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {userTests.length === 0 ? <div style={{ fontSize: 13, color: "#666" }}>Aucun test enregistré.</div> : null}
+        {userTests.length === 0 ? <div style={{ fontSize: 13, color: "#9CA3AF" }}>Aucun test enregistré.</div> : null}
         {userTests.map(t => (
-          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: 8 }}>
+          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", background: "#F8F9FA", padding: "10px 12px", borderRadius: 8 }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{t.type}</div>
-              <div style={{ fontSize: 11, color: "#888" }}>{t.date}</div>
+              <div style={{ fontSize: 11, color: "#6B7280" }}>{t.date}</div>
             </div>
             <div style={{ fontSize: 16, fontWeight: 800, color: USERS[user].color }}>{t.val}</div>
           </div>
@@ -1864,8 +1867,8 @@ function PlannedSessions({ user, planned, setPlanned }) {
     setPlanned({ ...planned, [user]: userPlanned.filter(p => p.id !== id) });
   };
 
-  const inp = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8, color: "#fff", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
+  const inp = { background: "#F5F7FA", border: "1px solid #E2E5EA",
+    borderRadius: 8, color: "#1A1A1A", padding: "8px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit" };
   const btn = { background: `linear-gradient(135deg, ${USERS[user].color}cc, ${USERS[user].color})`, border: "none",
     borderRadius: 8, padding: "8px 16px", color: "#000", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" };
 
@@ -1883,7 +1886,7 @@ function PlannedSessions({ user, planned, setPlanned }) {
       </div>
 
       {editing && (
-        <div style={{ marginBottom: 16, padding: 12, background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+        <div style={{ marginBottom: 16, padding: 12, background: "#F8F9FA", borderRadius: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
             <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inp} />
             <select value={form.discipline} onChange={e => setForm({ ...form, discipline: e.target.value })} style={inp}>
@@ -1896,15 +1899,15 @@ function PlannedSessions({ user, planned, setPlanned }) {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {upcoming.length === 0 ? <div style={{ fontSize: 13, color: "#666" }}>Aucune séance prévue.</div> : null}
+        {upcoming.length === 0 ? <div style={{ fontSize: 13, color: "#9CA3AF" }}>Aucune séance prévue.</div> : null}
         {upcoming.map(p => (
-          <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", background: "rgba(255,255,255,0.03)", padding: "10px 12px", borderRadius: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "rgba(255,255,255,0.05)", borderRadius: 12, color: USERS[user].color }}>
+          <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", background: "#F8F9FA", padding: "10px 12px", borderRadius: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, background: "#F5F5F5", borderRadius: 12, color: USERS[user].color }}>
               {getDiscIcon(p.discipline, 20)}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{p.desc}</div>
-              <div style={{ fontSize: 11, color: "#888" }}>{new Date(p.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+              <div style={{ fontSize: 11, color: "#6B7280" }}>{new Date(p.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
             </div>
             <button onClick={() => deletePlan(p.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>🗑️</button>
           </div>
@@ -2018,12 +2021,12 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+      background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
       padding: "0",
     }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
-        background: "#0A0A0A", borderTop: `2px solid ${color}55`,
+        background: "#FFFFFF", borderTop: `2px solid ${color}55`,
         borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 720,
         height: "92dvh", display: "flex", flexDirection: "column",
         animation: "slideUp 0.28s cubic-bezier(.4,0,.2,1)",
@@ -2038,7 +2041,7 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
         {/* Header */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12, padding: "14px 20px 10px",
-          borderBottom: "1px solid #1C1C1E",
+          borderBottom: "1px solid #E8EAED",
         }}>
           <div style={{
             width: 44, height: 44, borderRadius: 14, flexShrink: 0,
@@ -2049,15 +2052,15 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: 16 }}>{session.discipline}</div>
-            <div style={{ fontSize: 12, color: "#8E8E93" }}>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>
               {new Date(session.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               {subLabel && ` · ${subLabel}`}
             </div>
           </div>
           <button onClick={onClose} style={{
-            background: "#1C1C1E", border: "none", borderRadius: 99, width: 32, height: 32,
+            background: "#F0F0F0", border: "none", borderRadius: 99, width: 32, height: 32,
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", color: "#8E8E93", flexShrink: 0,
+            cursor: "pointer", color: "#6B7280", flexShrink: 0,
           }}><X size={16}/></button>
         </div>
 
@@ -2068,25 +2071,25 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {meta.map(m => (
               <div key={m.label} style={{
-                background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 12,
+                background: "#FFFFFF", border: "1px solid #E8EAED", borderRadius: 12,
                 padding: "12px 10px", textAlign: "center",
               }}>
-                <div style={{ color: "#8E8E93", marginBottom: 4 }}>{m.icon}</div>
+                <div style={{ color: "#6B7280", marginBottom: 4 }}>{m.icon}</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color }}>{m.val}</div>
-                <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>{m.label}</div>
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>{m.label}</div>
               </div>
             ))}
           </div>
 
           {/* Exercices muscu */}
           {session.exercises?.some(e => e.name) && (
-            <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 12, color: "#8E8E93", fontWeight: 700, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>EXERCICES</div>
+            <div style={{ background: "#F8F9FA", border: "1px solid #E8EAED", borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, letterSpacing: 1, marginBottom: 10, fontFamily: "monospace" }}>EXERCICES</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {session.exercises.filter(e => e.name).map((e, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
                     <span style={{ fontWeight: 600 }}>{e.name}</span>
-                    <span style={{ color: "#8E8E93", fontSize: 12 }}>
+                    <span style={{ color: "#6B7280", fontSize: 12 }}>
                       {(e.sets||[]).map((s, si) => (
                         <span key={si}>
                           {si > 0 && <span style={{ color: "#444", margin: "0 4px" }}>·</span>}
@@ -2102,14 +2105,14 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
 
           {/* Notes */}
           {session.notes && (
-            <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 12, color: "#8E8E93", fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>NOTES</div>
-              <div style={{ fontSize: 13, color: "#ccc", lineHeight: 1.6 }}>{session.notes}</div>
+            <div style={{ background: "#F8F9FA", border: "1px solid #E8EAED", borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, letterSpacing: 1, marginBottom: 8, fontFamily: "monospace" }}>NOTES</div>
+              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6 }}>{session.notes}</div>
             </div>
           )}
 
           {/* AI Analysis */}
-          <div style={{ background: "#0f1117", border: `1px solid ${color}33`, borderRadius: 14, padding: 16 }}>
+          <div style={{ background: "#EFF6FF", border: `1px solid ${color}33`, borderRadius: 14, padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <Bot size={16} color={color} />
               <span style={{ fontSize: 12, fontWeight: 700, color, letterSpacing: 1, fontFamily: "monospace" }}>ANALYSE IA</span>
@@ -2119,24 +2122,24 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
             {analysisLoading ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {[100, 80, 90, 70].map((w, i) => (
-                  <div key={i} style={{ height: 10, background: "#1C1C1E", borderRadius: 6, width: `${w}%`, animation: "pulse 1.5s ease-in-out infinite", animationDelay: `${i*0.15}s` }} />
+                  <div key={i} style={{ height: 10, background: "#E8EAED", borderRadius: 6, width: `${w}%`, animation: "pulse 1.5s ease-in-out infinite", animationDelay: `${i*0.15}s` }} />
                 ))}
                 <style>{`@keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:.7} }`}</style>
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "#ddd", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{analysis}</div>
+              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{analysis}</div>
             )}
           </div>
 
           {/* Chat about this session */}
-          <div style={{ background: "#1C1C1E", border: "1px solid #2C2C2E", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ background: "#F8F9FA", border: "1px solid #E8EAED", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <MessageSquare size={16} color="#8E8E93" />
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#8E8E93", letterSpacing: 1, fontFamily: "monospace" }}>DISCUTER AVEC LE COACH</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", letterSpacing: 1, fontFamily: "monospace" }}>DISCUTER AVEC LE COACH</span>
             </div>
 
             {chatMessages.length === 0 && !chatLoading && (
-              <div style={{ fontSize: 12, color: "#555", fontStyle: "italic" }}>
+              <div style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>
                 Pose une question sur cette séance…
               </div>
             )}
@@ -2147,7 +2150,7 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
                   <div key={i} style={{
                     alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                     maxWidth: "88%",
-                    background: m.role === "user" ? `${color}22` : "rgba(255,255,255,0.05)",
+                    background: m.role === "user" ? `${color}22` : "#F5F5F5",
                     border: `1px solid ${m.role === "user" ? color+"44" : "rgba(255,255,255,0.08)"}`,
                     borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                     padding: "8px 12px", fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap",
@@ -2156,7 +2159,7 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
                   </div>
                 ))}
                 {chatLoading && (
-                  <div style={{ alignSelf: "flex-start", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 12, fontSize: 12, color: "#8E8E93", display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ alignSelf: "flex-start", padding: "8px 12px", background: "#F5F5F5", borderRadius: 12, fontSize: 12, color: "#6B7280", display: "flex", alignItems: "center", gap: 6 }}>
                     <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Coach répond…
                   </div>
                 )}
@@ -2171,8 +2174,8 @@ function SessionDetailModal({ session, user, sessions, wellness, onClose }) {
                 onKeyDown={e => e.key === "Enter" && sendChat()}
                 placeholder="Ex: Comment améliorer mon allure ?"
                 style={{
-                  flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 10, color: "#fff", padding: "9px 12px", fontSize: 13,
+                  flex: 1, background: "#F0F2F5", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10, color: "#1A1A1A", padding: "9px 12px", fontSize: 13,
                   outline: "none", fontFamily: "inherit",
                 }}
               />
@@ -2250,7 +2253,7 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
     if (r <= 4) return "#34C759";
     if (r <= 6) return "#FFD60A";
     if (r <= 8) return "#FF9500";
-    return "#FF3B30";
+    return "#3B82F6";
   };
 
   return (
@@ -2260,15 +2263,15 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
         {/* Filter bar */}
         <div style={{
           position: "sticky", top: 60, zIndex: 40,
-          background: "rgba(0,0,0,0.92)", backdropFilter: "blur(16px)",
-          borderBottom: "1px solid #1C1C1E", padding: "10px 0 10px",
+          background: "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)",
+          borderBottom: "1px solid #E8EAED", padding: "10px 0 10px",
           marginLeft: -16, marginRight: -16, paddingLeft: 16,
           display: "flex", gap: 8, overflowX: "auto",
         }}>
           {allDisc.map(d => (
             <button key={d} onClick={() => setFilter(d)} style={{
               flexShrink: 0, padding: "6px 14px", borderRadius: 99, border: "none",
-              background: filter === d ? color : "#1C1C1E",
+              background: filter === d ? color : "#F0F0F0",
               color: filter === d ? "#000" : "#8E8E93",
               fontWeight: filter === d ? 700 : 500, fontSize: 12,
               cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
@@ -2283,18 +2286,18 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
 
         {/* Count */}
         <div style={{ padding: "14px 0 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 13, color: "#8E8E93" }}>
+          <div style={{ fontSize: 13, color: "#6B7280" }}>
             <span style={{ color, fontWeight: 700 }}>{userSessions.length}</span> séance{userSessions.length !== 1 ? "s" : ""}
             {filter !== "Toutes" && ` · ${filter}`}
           </div>
-          <div style={{ fontSize: 11, color: "#555", display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4 }}>
             <ListFilter size={12} /> Toucher pour détails + IA
           </div>
         </div>
 
         {/* List */}
         {userSessions.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#555" }}>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#9CA3AF" }}>
             <FileText size={32} color="#333" style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 14 }}>Aucune séance enregistrée{filter !== "Toutes" ? ` en ${filter}` : ""}.</div>
           </div>
@@ -2304,7 +2307,7 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
               if (item.type === "month") return (
                 <div key={`m-${idx}`} style={{
                   padding: "16px 0 8px",
-                  fontSize: 11, fontWeight: 700, color: "#555",
+                  fontSize: 11, fontWeight: 700, color: "#9CA3AF",
                   letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "monospace",
                 }}>{item.label}</div>
               );
@@ -2316,7 +2319,7 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
               return (
                 <div key={s.id} style={{
                   display: "flex", alignItems: "center", gap: 12,
-                  borderBottom: "1px solid #1C1C1E", padding: "12px 0",
+                  borderBottom: "1px solid #E8EAED", padding: "12px 0",
                   opacity: isDeleting ? 0.4 : 1, transition: "opacity 0.2s",
                 }}>
                   {/* Clickable main area */}
@@ -2336,8 +2339,8 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
 
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{s.discipline}</div>
-                      <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "#1A1A1A" }}>{s.discipline}</div>
+                      <div style={{ fontSize: 11, color: "#6B7280", marginTop: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <span>{new Date(s.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
                         <span style={{ color: "#444" }}>·</span>
                         <span>{s.duration} min</span>
@@ -2363,7 +2366,7 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
                       <>
                         <button onClick={e => handleDelete(e, s.id)} style={{
                           padding: "5px 10px", borderRadius: 8, border: "none",
-                          background: "#FF3B3020", color: "#FF3B30",
+                          background: "#3B82F620", color: "#3B82F6",
                           fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
                           display: "flex", alignItems: "center", gap: 4,
                         }}>
@@ -2371,7 +2374,7 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
                         </button>
                         <button onClick={e => cancelConfirm(e, s.id)} style={{
                           padding: "5px 10px", borderRadius: 8, border: "none",
-                          background: "#2C2C2E", color: "#8E8E93",
+                          background: "#E8EAED", color: "#6B7280",
                           fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                         }}>
                           Annuler
@@ -2380,12 +2383,12 @@ function HistoriquePage({ user, sessions, setSessions, wellness }) {
                     ) : (
                       <button onClick={e => handleDelete(e, s.id)} disabled={isDeleting} style={{
                         width: 32, height: 32, borderRadius: 8, border: "none",
-                        background: "transparent", color: "#3C3C3E",
+                        background: "transparent", color: "#CBCBCB",
                         cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                         transition: "all 0.15s",
                       }}
-                        onMouseEnter={e => e.currentTarget.style.color = "#FF3B30"}
-                        onMouseLeave={e => e.currentTarget.style.color = "#3C3C3E"}
+                        onMouseEnter={e => e.currentTarget.style.color = "#3B82F6"}
+                        onMouseLeave={e => e.currentTarget.style.color = "#CBCBCB"}
                       >
                         {isDeleting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />}
                       </button>
@@ -2465,39 +2468,44 @@ Donne-moi une analyse courte (4–6 lignes max) : feedback sur la séance, compa
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#000000", color: "#FFFFFF",
+      minHeight: "100vh", background: "#F4F5F7", color: "#1A1A1A",
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 0px; }
-        input, select, textarea { color-scheme: dark; }
-        button:hover:not(:disabled) { filter: brightness(1.1); }
+        body { background: #F4F5F7; }
+        input, select, textarea { color-scheme: light; outline: none; }
+        input::placeholder, textarea::placeholder { color: #9CA3AF; }
+        button:hover:not(:disabled) { opacity: 0.85; filter: none; }
+        button:active:not(:disabled) { transform: scale(0.97); }
       `}</style>
 
       {/* HEADER */}
       <div style={{
         position: "sticky", top: 0, zIndex: 50,
-        background: "rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
-        borderBottom: "1px solid #1C1C1E",
-        padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+        background: "rgba(255,255,255,0.96)", backdropFilter: "blur(20px)",
+        borderBottom: "1px solid #E8EAED",
+        boxShadow: "0 1px 0 rgba(0,0,0,0.05)",
+        padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
       }}>
-        <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: -0.5, flex: 1, minWidth: 100 }}>
+        <div style={{ fontWeight: 900, fontSize: 20, letterSpacing: -1, flex: 1, minWidth: 100 }}>
           <span style={{ color: USERS.louis.color }}>Prépa</span>
-          <span style={{ color: USERS.romain.color }}>-Alfa</span>
+          <span style={{ color: "#1A1A1A" }}>-Alfa</span>
         </div>
 
         {/* User switcher */}
-        <div style={{ display: "flex", gap: 4, background: "#1C1C1E", padding: 4, borderRadius: 999 }}>
+        <div style={{ display: "flex", gap: 3, background: "#F0F0F0", padding: 3, borderRadius: 999 }}>
           {["louis", "romain"].map(uid => (
             <button key={uid} onClick={() => setActiveUser(uid)}
               style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
                 borderRadius: 999, border: "none",
                 background: activeUser === uid ? USERS[uid].color : "transparent",
-                color: activeUser === uid ? "#fff" : "#8E8E93",
-                cursor: "pointer", fontWeight: 600, fontSize: 13, fontFamily: "inherit", transition: "all 0.2s",
+                color: activeUser === uid ? "#fff" : "#6B7280",
+                cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "inherit",
+                transition: "all 0.18s", boxShadow: activeUser === uid ? "0 2px 6px rgba(0,0,0,0.15)" : "none",
               }}>
               <Avatar user={uid} size={20} />
               {USERS[uid].name}
@@ -2555,20 +2563,27 @@ Donne-moi une analyse courte (4–6 lignes max) : feedback sur la séance, compa
       {/* BOTTOM NAV */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
-        background: "rgba(0,0,0,0.90)", backdropFilter: "blur(20px)",
-        borderTop: "1px solid #1C1C1E",
-        display: "flex", padding: "10px 0 max(10px, env(safe-area-inset-bottom))",
+        background: "rgba(255,255,255,0.97)", backdropFilter: "blur(20px)",
+        borderTop: "1px solid #E8EAED",
+        boxShadow: "0 -1px 0 rgba(0,0,0,0.04)",
+        display: "flex", padding: "8px 0 max(8px, env(safe-area-inset-bottom))",
       }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             style={{
-              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
               background: "none", border: "none", cursor: "pointer",
-              color: activeTab === t.id ? USERS[activeUser].color : "#555",
-              fontFamily: "inherit", transition: "color 0.2s",
+              color: activeTab === t.id ? USERS[activeUser].color : "#9CA3AF",
+              fontFamily: "inherit", transition: "color 0.15s",
             }}>
-            <span style={{ color: activeTab === t.id ? USERS[activeUser].color : "#8E8E93", marginBottom: 2 }}>{t.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: activeTab === t.id ? 600 : 500 }}>{t.label}</span>
+            <span style={{
+              color: activeTab === t.id ? USERS[activeUser].color : "#9CA3AF",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 32, height: 28, borderRadius: 8,
+              background: activeTab === t.id ? `${USERS[activeUser].color}12` : "transparent",
+              transition: "all 0.15s",
+            }}>{t.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: activeTab === t.id ? 700 : 500, letterSpacing: 0.2 }}>{t.label}</span>
           </button>
         ))}
       </div>
