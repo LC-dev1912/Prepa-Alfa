@@ -250,27 +250,49 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   async function submit() {
     if (!f.duration) return
     setSaving(true)
-    // eslint-disable-next-line no-unused-vars
-    const { brickLegs, brickTransitions, conditions, ...rest } = f
-    const session = {
-      ...rest,
-      user_id: uid,
-      duration: +f.duration,
-      distance: f.distance ? +f.distance : null,
-      rpe: +f.rpe,
-      hr_avg: f.hr_avg ? +f.hr_avg : null,
-      hr_max: f.hr_max ? +f.hr_max : null,
-      vitesse: f.vitesse ? +f.vitesse : null,
-      denivele: f.denivele ? +f.denivele : null,
+
+    // Fields not in the DB schema — serialized into notes to preserve them
+    const extras = {}
+    if (f.vitesse) extras.vitesse = f.vitesse
+    if (f.denivele) extras.denivele = f.denivele
+    if (disc === 'Natation' && f.nageType) extras.nageType = f.nageType
+    if (disc === 'Vélo' && f.veloType) extras.veloType = f.veloType
+    if (disc === 'Course à pied' && f.capType) extras.capType = f.capType
+    if (disc === 'Musculation') {
+      if (f.muscuFocus) extras.muscuFocus = f.muscuFocus
+      if (f.exercises?.some(e => e.name)) extras.exercises = f.exercises
     }
+
+    let notes = f.notes || ''
     if (disc === 'Brick') {
       const legs = f.brickLegs.filter(l => l.duration)
       const legsDur = legs.reduce((a, l) => a + (+l.duration || 0), 0)
       const transDur = f.brickTransitions.reduce((a, t) => a + (+t || 0), 0)
-      if (legsDur > 0) session.duration = legsDur + transDur
+      extras.brickLegs = legs
+      extras.brickTransitions = f.brickTransitions
+      extras.totalDuration = legsDur + transDur || +f.duration
       const legStr = legs.map(l => `${l.discipline} ${l.duration}min${l.distance ? ` ${l.distance}${l.discipline === 'Natation' ? 'm' : 'km'}` : ''}`).join(' → ')
-      session.notes = session.notes ? `${session.notes} | ${legStr}` : legStr
+      if (legStr) notes = notes ? `${notes} | ${legStr}` : legStr
     }
+    const extrasJson = Object.keys(extras).length ? JSON.stringify(extras) : ''
+    if (extrasJson) notes = notes ? `${notes} ##${extrasJson}` : `##${extrasJson}`
+
+    const brickDuration = extras.totalDuration
+    const session = {
+      user_id: uid,
+      date: f.date,
+      discipline: f.discipline,
+      duration: brickDuration || +f.duration,
+      distance: f.distance ? +f.distance : null,
+      distance_unit: f.distance_unit,
+      pace: f.pace || null,
+      hr_avg: f.hr_avg ? +f.hr_avg : null,
+      hr_max: f.hr_max ? +f.hr_max : null,
+      rpe: +f.rpe,
+      conditions: f.conditions || null,
+      notes: notes || null,
+    }
+
     console.log('Inserting session:', session)
     const { error } = await supabase.from('sessions').insert(session)
     if (error) {
