@@ -1,774 +1,759 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase.js'
+import {
+  Waves, Bike, Footprints, Dumbbell, Zap, HeartPulse,
+  Home, Plus, Bot, Calendar, Swords, Activity,
+  Trophy, Clock, ChevronRight, Heart, X,
+  Loader2, MessageSquare
+} from 'lucide-react'
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+} from 'recharts'
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const ORANGE = '#FC4C02'
+const BLUE = '#3B82F6'
+
 const USERS = {
-  louis: { name: 'Louis', color: '#0071e3', avatar: 'L', profile: 'Musculation 3 ans, régulier 1 an (4x/sem). Bonne base de force. Ne court pas. Sait nager.' },
-  romain: { name: 'Romain', color: '#ff6b35', avatar: 'R', profile: 'Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT.' },
+  louis: { name: 'Louis', accent: ORANGE, avatar: 'L', profile: 'Musculation 3 ans, régulier 1 an (4x/sem). Bonne base de force. Ne court pas. Sait nager.' },
+  romain: { name: 'Romain', accent: BLUE, avatar: 'R', profile: 'Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT.' },
 }
 
 const DISCIPLINES = ['Natation', 'Vélo', 'Course à pied', 'Musculation', 'Brick', 'Récupération']
-const ICONS = { Natation: '🏊', Vélo: '🚴', 'Course à pied': '🏃', Musculation: '💪', Brick: '⚡', Récupération: '🧘' }
+const DISC_ICONS = { Natation: Waves, Vélo: Bike, 'Course à pied': Footprints, Musculation: Dumbbell, Brick: Zap, Récupération: HeartPulse }
 const RACE_DATE = new Date('2026-12-15')
 
-const PLAN = {
-  louis: [
-    { phase: 'Fondation', weeks: 'Juin – Août', desc: '3 séances/sem · Musculation gainage 2x · RPE 5–6' },
-    { phase: 'Développement', weeks: 'Sept – Oct', desc: '4 séances/sem · Bricks introduits · +10% volume/sem' },
-    { phase: 'Spécifique', weeks: 'Novembre', desc: '5 séances/sem · Allures cibles · Gainage uniquement' },
-    { phase: 'Affûtage', weeks: 'Décembre', desc: 'Volume −40% · Simulation course semaine 3' },
-  ],
-  romain: [
-    { phase: 'Fondation', weeks: 'Juin – Août', desc: '2 séances/sem · Courir 20min + nager 200m · RPE 4–5' },
-    { phase: 'Développement', weeks: 'Sept – Oct', desc: '3 séances/sem · Vélo introduit · Premiers bricks' },
-    { phase: 'Spécifique', weeks: 'Novembre', desc: '4 séances/sem · Distances cibles atteintes' },
-    { phase: 'Affûtage', weeks: 'Décembre', desc: 'Volume réduit · Confiance · Simulation course' },
-  ],
-}
+const EXERCISE_SUGGESTIONS = [
+  'Squat', 'Front squat', 'Fentes', 'Presse à cuisses', 'Hip thrust', 'Deadlift',
+  'Développé couché', 'Développé militaire', 'Pompes', 'Tractions', 'Rowing barre',
+  'Tirage vertical', 'Gainage frontal', 'Curl biceps', 'Extensions triceps',
+]
 
-// ─── AI ───────────────────────────────────────────────────────────────────────
-async function callClaude(system, userMsg, history = []) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+async function askCoach(system, messages) {
+  const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system,
-      messages: [...history, { role: 'user', content: userMsg }],
-    }),
+    body: JSON.stringify({ system, messages }),
   })
   const data = await res.json()
-  return data.content?.map(b => b.text || '').join('') || 'Erreur de connexion.'
+  if (data.error) throw new Error(JSON.stringify(data.error))
+  return data.content?.map(b => b.text || '').join('') || ''
 }
+
+const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
+const todayStr = () => new Date().toISOString().slice(0, 10)
+const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
 function buildSystem(uid, sessions, wellness) {
-  const s = sessions.filter(x => x.user_id === uid).slice(-15)
+  const s = sessions.filter(x => x.user_id === uid).slice(-20)
   const w = wellness.filter(x => x.user_id === uid).slice(-7)
-  return `Tu es le coach personnel de ${USERS[uid].name}, expert en triathlon Sprint, préparation physique et nutrition sportive.
-
+  return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
 PROFIL : ${USERS[uid].profile}
-OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026.
-
+OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026. Jour J-${daysLeft()}.
 SÉANCES RÉCENTES :
-${s.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10`).join('\n') || 'Aucune séance encore.'}
-
-BIEN-ÊTRE RÉCENT :
+${s.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance?` | ${x.distance}${x.distance_unit}`:''} | RPE ${x.rpe}/10${x.notes?` | ${x.notes}`:''}`).join('\n') || 'Aucune séance.'}
+BIEN-ÊTRE :
 ${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Fatigue ${x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
-
-Réponds en français. Sois direct, bienveillant, précis. Donne des conseils concrets adaptés à son historique.`
+Réponds en français, direct, bienveillant et concret.`
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const today = () => new Date().toISOString().slice(0, 10)
-const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
-const weekAgo = () => { const d = new Date(); d.setDate(d.getDate() - 7); return d }
-
-// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
-const T = {
-  bg: '#ffffff',
-  bgSecondary: '#f5f5f7',
-  bgTertiary: '#e8e8ed',
-  text: '#1d1d1f',
-  textSecondary: '#6e6e73',
-  textTertiary: '#aeaeb2',
-  border: '#d2d2d7',
-  borderLight: '#e8e8ed',
-  radius: 14,
-  radiusSm: 10,
-  shadow: '0 2px 20px rgba(0,0,0,0.08)',
-  shadowSm: '0 1px 8px rgba(0,0,0,0.06)',
+const S = {
+  bg: '#F2F2F7', card: '#FFFFFF', text: '#1C1C1E', textSec: '#8E8E93',
+  textTer: '#AEAEB2', border: '#E5E5EA', green: '#34C759', red: '#FF3B30', yellow: '#FF9500',
+  radius: 20, radiusSm: 12,
 }
 
-// ─── ATOMS ───────────────────────────────────────────────────────────────────
-function Chip({ children, active, color, onClick }) {
+const discColor = (disc) => ({ Natation: '#007AFF', Vélo: '#FF9500', 'Course à pied': ORANGE, Musculation: '#AF52DE', Brick: '#FF3B30', Récupération: S.green })[disc] || S.textSec
+
+const Card = ({ children, style, onClick }) => (
+  <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '16px 18px', ...style, cursor: onClick ? 'pointer' : 'default' }}>{children}</div>
+)
+
+const Label = ({ children }) => (
+  <div style={{ fontSize: 12, fontWeight: 600, color: S.textSec, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>{children}</div>
+)
+
+const PBar = ({ pct, color, h = 6 }) => (
+  <div style={{ height: h, background: S.bg, borderRadius: 99, overflow: 'hidden' }}>
+    <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.6s ease' }} />
+  </div>
+)
+
+const Avatar = ({ uid, size = 36 }) => (
+  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 800, flexShrink: 0 }}>{USERS[uid].avatar}</div>
+)
+
+const DiscIcon = ({ disc, size = 20, color }) => {
+  const Icon = DISC_ICONS[disc] || Activity
+  return <Icon size={size} color={color || S.text} />
+}
+
+const inputStyle = (extra = {}) => ({
+  width: '100%', padding: '12px 14px', fontSize: 15,
+  background: S.bg, border: `1px solid ${S.border}`, borderRadius: S.radiusSm,
+  color: S.text, outline: 'none', fontFamily: 'inherit', ...extra,
+})
+
+function Sheet({ open, onClose, children, title }) {
+  if (!open) return null
   return (
-    <button onClick={onClick} style={{
-      padding: '6px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
-      background: active ? color : T.bgSecondary,
-      color: active ? '#fff' : T.textSecondary,
-      fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-      transition: 'all 0.15s ease',
-    }}>{children}</button>
-  )
-}
-
-function Pill({ children, color = T.textSecondary }) {
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 99,
-      background: `${color}15`, color,
-      fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
-    }}>{children}</span>
-  )
-}
-
-function Section({ title, children, action }) {
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 600, color: T.text, margin: 0 }}>{title}</h2>
-        {action}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: S.card, borderRadius: '24px 24px 0 0', padding: '0 0 40px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ width: 40, height: 4, background: S.border, borderRadius: 99, margin: '12px auto 0' }} />
+        {title && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px 0' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: S.text }}>{title}</div>
+            <button onClick={onClose} style={{ background: S.bg, border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={16} color={S.textSec} />
+            </button>
+          </div>
+        )}
+        <div style={{ padding: '16px 20px 0' }}>{children}</div>
       </div>
-      {children}
     </div>
   )
 }
 
-function Card({ children, style, onClick }) {
-  return (
-    <div onClick={onClick} style={{
-      background: T.bg, borderRadius: T.radius,
-      border: `1px solid ${T.borderLight}`,
-      boxShadow: T.shadowSm,
-      padding: 20, ...style,
-      cursor: onClick ? 'pointer' : 'default',
-    }}>{children}</div>
-  )
-}
-
-function Bar({ value, max, color, height = 4 }) {
-  const pct = Math.min(100, max > 0 ? (value / max) * 100 : 0)
-  return (
-    <div style={{ background: T.bgTertiary, borderRadius: 99, height, overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: color, transition: 'width 0.6s ease' }} />
-    </div>
-  )
-}
-
-function Avatar({ uid, size = 36 }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: USERS[uid].color, color: '#fff',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.4, fontWeight: 700, flexShrink: 0,
-    }}>{USERS[uid].avatar}</div>
-  )
-}
-
-function Btn({ children, onClick, disabled, variant = 'primary', color, style }) {
-  const c = color || USERS.louis.color
-  const styles = {
-    primary: { background: disabled ? T.bgTertiary : c, color: disabled ? T.textTertiary : '#fff', border: 'none' },
-    secondary: { background: T.bgSecondary, color: T.text, border: 'none' },
-    ghost: { background: 'transparent', color: c, border: `1px solid ${T.border}` },
-  }
-  return (
-    <button onClick={onClick} disabled={disabled} style={{
-      padding: '10px 20px', borderRadius: T.radiusSm,
-      fontSize: 14, fontWeight: 500, cursor: disabled ? 'not-allowed' : 'pointer',
-      fontFamily: 'inherit', transition: 'all 0.15s ease',
-      ...styles[variant], ...style,
-    }}>{children}</button>
-  )
-}
-
-// ─── STAT CARD ───────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color }) {
-  return (
-    <Card style={{ textAlign: 'center', padding: '20px 12px' }}>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || T.text, letterSpacing: -0.5 }}>{value}</div>
-      <div style={{ fontSize: 13, color: T.text, fontWeight: 500, marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: T.textTertiary, marginTop: 4 }}>{sub}</div>}
-    </Card>
-  )
-}
-
-// ─── WELLNESS ────────────────────────────────────────────────────────────────
 function WellnessForm({ uid, wellness, onSave }) {
-  const t = today()
+  const t = todayStr()
   const ex = wellness.find(w => w.user_id === uid && w.date === t)
-  const [sleep, setSleep] = useState(ex?.sleep || 3)
-  const [fatigue, setFatigue] = useState(ex?.fatigue || 3)
-  const [mood, setMood] = useState(ex?.mood || 3)
+  const [vals, setVals] = useState({ sleep: ex?.sleep || 3, fatigue: ex?.fatigue || 3, mood: ex?.mood || 3 })
   const [saved, setSaved] = useState(!!ex)
-  const [loading, setLoading] = useState(false)
-
-  const score = Math.round(((sleep + (6 - fatigue) + mood) / 13) * 100)
-  const scoreColor = score >= 70 ? '#34c759' : score >= 40 ? '#ff9500' : '#ff3b30'
-  const emojis = [['😴','😞','😐','😊','🤩'], ['🤩','😊','😐','😞','😴'], ['😞','😐','😊','😄','🤩']]
-
+  const [saving, setSaving] = useState(false)
+  const score = Math.round(((vals.sleep + (6 - vals.fatigue) + vals.mood) / 13) * 100)
+  const scoreColor = score >= 70 ? S.green : score >= 40 ? S.yellow : S.red
+  const emojis = [['😴','😞','😐','😊','🤩'],['🤩','😊','😐','😞','😴'],['😞','😐','😊','😄','🤩']]
+  const items = [{ key: 'sleep', label: 'Sommeil', display: vals.sleep, emKey: 0 }, { key: 'fatigue', label: 'Énergie', display: 6 - vals.fatigue, emKey: 1 }, { key: 'mood', label: 'Humeur', display: vals.mood, emKey: 2 }]
+  const onChange = (key, v) => { setVals(p => ({ ...p, [key]: key === 'fatigue' ? 6 - v : v })); setSaved(false) }
   async function save() {
-    setLoading(true)
-    await supabase.from('wellness').upsert({ user_id: uid, date: t, sleep, fatigue, mood }, { onConflict: 'user_id,date' })
-    await onSave()
-    setSaved(true)
-    setLoading(false)
+    setSaving(true)
+    await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
+    await onSave(); setSaved(true); setSaving(false)
   }
-
-  const labels = ['Sommeil', 'Énergie', 'Humeur']
-  const vals = [sleep, 6 - fatigue, mood]
-  const sets = [(v) => { setSleep(v); setSaved(false) }, (v) => { setFatigue(6 - v); setSaved(false) }, (v) => { setMood(v); setSaved(false) }]
-
   return (
     <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Check-in du matin</div>
-          <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 2 }}>Comment tu te sens aujourd'hui ?</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: scoreColor }}>{score}%</div>
-          <div style={{ fontSize: 10, color: T.textTertiary }}>bien-être</div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: S.text }}>Check-in du matin</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor }}>{score}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>%</span></div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
-        {labels.map((label, i) => (
-          <div key={label}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, color: T.textSecondary }}>{label}</span>
-              <span style={{ fontSize: 18 }}>{emojis[i][vals[i] - 1]}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 18 }}>
+        {items.map(item => (
+          <div key={item.key}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 14, color: S.text, fontWeight: 500 }}>{item.label}</span>
+              <span style={{ fontSize: 20 }}>{emojis[item.emKey][item.display - 1]}</span>
             </div>
-            <input type="range" min="1" max="5" value={vals[i]}
-              onChange={e => sets[i](+e.target.value)}
-              style={{ width: '100%', accentColor: USERS[uid].color, cursor: 'pointer' }} />
+            <input type="range" min="1" max="5" value={item.display} onChange={e => onChange(item.key, +e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
           </div>
         ))}
       </div>
-      <Btn onClick={save} disabled={saved || loading} color={USERS[uid].color} style={{ width: '100%' }}>
-        {loading ? 'Enregistrement...' : saved ? '✓ Check-in enregistré' : 'Enregistrer'}
-      </Btn>
+      <button onClick={save} disabled={saved || saving} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: saved ? S.bg : USERS[uid].accent, color: saved ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: saved ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+        {saving ? 'Enregistrement...' : saved ? '✓ Check-in enregistré' : 'Enregistrer'}
+      </button>
     </Card>
   )
 }
 
-// ─── SESSION FORM ─────────────────────────────────────────────────────────────
+function Milestones({ uid, sessions }) {
+  const targets = [
+    { disc: 'Natation', label: "750m sans s'arrêter", target: 750, toM: s => s.distance_unit === 'm' ? +s.distance : +s.distance * 1000 },
+    { disc: 'Vélo', label: '20km à rythme soutenu', target: 20000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
+    { disc: 'Course à pied', label: '5km sans marcher', target: 5000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
+  ]
+  return (
+    <Card>
+      <Label>Jalons objectifs</Label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {targets.map(m => {
+          const best = sessions.filter(s => s.user_id === uid && s.discipline === m.disc && s.distance).reduce((mx, s) => Math.max(mx, m.toM(s)), 0)
+          const pct = (best / m.target) * 100
+          const done = pct >= 100
+          const color = done ? S.green : discColor(m.disc)
+          return (
+            <div key={m.disc}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <DiscIcon disc={m.disc} size={16} color={color} />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: S.text }}>{m.label}</span>
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color }}>{done ? '🏆' : `${Math.round(pct)}%`}</span>
+              </div>
+              <PBar pct={pct} color={color} h={5} />
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
 function SessionForm({ uid, sessions, onSave, onAnalyze }) {
-  const [f, setF] = useState({ date: today(), discipline: 'Course à pied', duration: '', distance: '', distance_unit: 'km', pace: '', hr_avg: '', hr_max: '', rpe: '6', notes: '' })
-  const [loading, setLoading] = useState(false)
+  const [f, setF] = useState({ date: todayStr(), discipline: 'Course à pied', duration: '', distance: '', distance_unit: 'km', pace: '', hr_avg: '', hr_max: '', rpe: '6', conditions: '', notes: '', vitesse: '', denivele: '', nageType: 'Crawl', veloType: 'Route', capType: 'Footing', muscuFocus: 'Full body', exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }] })
+  const [saving, setSaving] = useState(false)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
-
-  const last = sessions.filter(s => s.user_id === uid && s.discipline === f.discipline)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]
-
-  const delta = last && f.distance && last.distance
-    ? ((+f.distance - +last.distance) / +last.distance * 100).toFixed(1) : null
-
-  const inp = { style: { background: T.bgSecondary, border: 'none', borderRadius: T.radiusSm, color: T.text, padding: '10px 14px', fontSize: 14, width: '100%', outline: 'none', fontFamily: 'inherit' } }
-
+  const last = sessions.filter(s => s.user_id === uid && s.discipline === f.discipline).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+  const delta = last && f.distance && last.distance ? ((+f.distance - +last.distance) / +last.distance * 100).toFixed(1) : null
+  const addEx = () => setF(p => ({ ...p, exercises: [...p.exercises, { name: '', sets: [{ weight: '', reps: '' }] }] }))
+  const rmEx = i => setF(p => ({ ...p, exercises: p.exercises.filter((_, j) => j !== i) }))
+  const updEx = (i, name) => { const e = [...f.exercises]; e[i] = { ...e[i], name }; set('exercises', e) }
+  const addSet = i => { const e = [...f.exercises]; const l = e[i].sets.slice(-1)[0]; e[i] = { ...e[i], sets: [...e[i].sets, { weight: l?.weight||'', reps: l?.reps||'' }] }; set('exercises', e) }
+  const rmSet = (ei, si) => { const e = [...f.exercises]; e[ei] = { ...e[ei], sets: e[ei].sets.filter((_, j) => j !== si) }; set('exercises', e) }
+  const updSet = (ei, si, k, v) => { const e = [...f.exercises]; const sets = [...e[ei].sets]; sets[si] = { ...sets[si], [k]: v }; e[ei] = { ...e[ei], sets }; set('exercises', e) }
   async function submit() {
     if (!f.duration) return
-    setLoading(true)
-    const session = { ...f, user_id: uid, duration: +f.duration, distance: f.distance ? +f.distance : null, hr_avg: f.hr_avg ? +f.hr_avg : null, hr_max: f.hr_max ? +f.hr_max : null, rpe: +f.rpe }
+    setSaving(true)
+    const session = { ...f, user_id: uid, duration: +f.duration, distance: f.distance ? +f.distance : null, rpe: +f.rpe }
     await supabase.from('sessions').insert(session)
-    await onSave()
-    onAnalyze(session, last)
-    setF(p => ({ ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6' }))
-    setLoading(false)
+    await onSave(); onAnalyze(session, last)
+    setF(p => ({ ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '', exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }] }))
+    setSaving(false)
   }
+  const disc = f.discipline
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Card style={{ padding: '14px 16px' }}>
+        <Label>Discipline</Label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {DISCIPLINES.map(d => {
+            const color = discColor(d); const active = disc === d
+            return (
+              <button key={d} onClick={() => set('discipline', d)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 99, border: `1.5px solid ${active ? color : S.border}`, background: active ? `${color}18` : S.card, color: active ? color : S.textSec, fontSize: 13, fontWeight: active ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <DiscIcon disc={d} size={14} color={active ? color : S.textSec} />{d}
+              </button>
+            )
+          })}
+        </div>
+      </Card>
+      <Card style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><Label>Date</Label><input type="date" value={f.date} onChange={e => set('date', e.target.value)} style={inputStyle()} /></div>
+          <div><Label>Durée (min)</Label><input type="number" value={f.duration} placeholder="45" onChange={e => set('duration', e.target.value)} style={inputStyle()} /></div>
+          {disc === 'Natation' && <>
+            <div><Label>Distance (m)</Label><input type="number" value={f.distance} placeholder="750" onChange={e => set('distance', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>Allure /100m</Label><input value={f.pace} placeholder="2:00" onChange={e => set('pace', e.target.value)} style={inputStyle()} /></div>
+            <div style={{ gridColumn: '1/-1' }}><Label>Type de nage</Label><select value={f.nageType} onChange={e => set('nageType', e.target.value)} style={inputStyle()}>{['Crawl','Brasse','Dos','Papillon','Mixte'].map(t => <option key={t}>{t}</option>)}</select></div>
+          </>}
+          {disc === 'Vélo' && <>
+            <div><Label>Distance (km)</Label><input type="number" value={f.distance} placeholder="20" onChange={e => set('distance', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>Vitesse (km/h)</Label><input type="number" value={f.vitesse} placeholder="28" onChange={e => set('vitesse', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>Dénivelé+ (m)</Label><input type="number" value={f.denivele} placeholder="200" onChange={e => set('denivele', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>Type</Label><select value={f.veloType} onChange={e => set('veloType', e.target.value)} style={inputStyle()}>{['Route','VTT','Home trainer','Gravel'].map(t => <option key={t}>{t}</option>)}</select></div>
+          </>}
+          {disc === 'Course à pied' && <>
+            <div><Label>Distance (km)</Label><input type="number" value={f.distance} placeholder="5" onChange={e => set('distance', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>Allure /km</Label><input value={f.pace} placeholder="5:30" onChange={e => set('pace', e.target.value)} style={inputStyle()} /></div>
+            <div style={{ gridColumn: '1/-1' }}><Label>Type de sortie</Label><select value={f.capType} onChange={e => set('capType', e.target.value)} style={inputStyle()}>{['Footing','Fractionné','Sortie longue','Côtes','Tempo','Récup'].map(t => <option key={t}>{t}</option>)}</select></div>
+          </>}
+          {disc === 'Musculation' && <div style={{ gridColumn: '1/-1' }}><Label>Focus</Label><select value={f.muscuFocus} onChange={e => set('muscuFocus', e.target.value)} style={inputStyle()}>{['Haut du corps','Bas du corps','Full body','Core / Gainage'].map(t => <option key={t}>{t}</option>)}</select></div>}
+          {['Natation','Vélo','Course à pied'].includes(disc) && <>
+            <div><Label>FC Moy (bpm)</Label><input type="number" value={f.hr_avg} placeholder="145" onChange={e => set('hr_avg', e.target.value)} style={inputStyle()} /></div>
+            <div><Label>FC Max (bpm)</Label><input type="number" value={f.hr_max} placeholder="172" onChange={e => set('hr_max', e.target.value)} style={inputStyle()} /></div>
+          </>}
+          <div style={{ gridColumn: '1/-1' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Label>Effort perçu (RPE)</Label>
+              <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{f.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
+            </div>
+            <input type="range" min="1" max="10" value={f.rpe} onChange={e => set('rpe', e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
+          </div>
+          <div style={{ gridColumn: '1/-1' }}>
+            <Label>Notes</Label>
+            <textarea value={f.notes} onChange={e => set('notes', e.target.value)} placeholder="Ressenti, observations..." rows={3} style={{ ...inputStyle(), resize: 'vertical' }} />
+          </div>
+        </div>
+      </Card>
+      {disc === 'Musculation' && (
+        <Card style={{ padding: '14px 16px' }}>
+          <Label>Exercices</Label>
+          <datalist id="exo-list">{EXERCISE_SUGGESTIONS.map(e => <option key={e} value={e} />)}</datalist>
+          {f.exercises.map((ex, ei) => (
+            <div key={ei} style={{ marginBottom: 14, padding: 14, background: S.bg, borderRadius: S.radiusSm }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: USERS[uid].accent }}>Exercice {ei + 1}</span>
+                {f.exercises.length > 1 && <button onClick={() => rmEx(ei)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: S.red }}><X size={16} /></button>}
+              </div>
+              <input list="exo-list" value={ex.name} onChange={e => updEx(ei, e.target.value)} placeholder="Nom de l'exercice" style={{ ...inputStyle(), marginBottom: 10 }} />
+              {ex.sets.map((s, si) => (
+                <div key={si} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: S.textSec, minWidth: 20 }}>S{si+1}</span>
+                  <input type="number" value={s.weight} placeholder="kg" onChange={e => updSet(ei, si, 'weight', e.target.value)} style={{ ...inputStyle(), flex: 1, padding: '8px 10px', fontSize: 13 }} />
+                  <span style={{ color: S.textSec, fontSize: 12 }}>×</span>
+                  <input type="number" value={s.reps} placeholder="reps" onChange={e => updSet(ei, si, 'reps', e.target.value)} style={{ ...inputStyle(), flex: 1, padding: '8px 10px', fontSize: 13 }} />
+                  {ex.sets.length > 1 && <button onClick={() => rmSet(ei, si)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: S.textTer }}><X size={14} /></button>}
+                </div>
+              ))}
+              <button onClick={() => addSet(ei)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px dashed ${S.border}`, background: 'transparent', color: S.textSec, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>+ Série</button>
+            </div>
+          ))}
+          <button onClick={addEx} style={{ width: '100%', padding: '10px', borderRadius: S.radiusSm, border: `1.5px dashed ${USERS[uid].accent}`, background: `${USERS[uid].accent}08`, color: USERS[uid].accent, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>+ Exercice</button>
+        </Card>
+      )}
+      {last && (
+        <div style={{ padding: '12px 14px', background: S.bg, borderRadius: S.radiusSm, fontSize: 13 }}>
+          <div style={{ color: S.textSec, marginBottom: 6, fontWeight: 500 }}>Dernière {disc} — {last.date}</div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span><span style={{ color: S.textSec }}>Durée </span><strong>{last.duration}min</strong></span>
+            {last.distance && <span><span style={{ color: S.textSec }}>Dist </span><strong>{last.distance}{last.distance_unit}</strong></span>}
+            {delta !== null && <span style={{ fontWeight: 700, color: +delta >= 0 ? S.green : S.red }}>{+delta >= 0 ? '+' : ''}{delta}%</span>}
+          </div>
+        </div>
+      )}
+      <button onClick={submit} disabled={saving || !f.duration} style={{ width: '100%', padding: '16px', borderRadius: S.radiusSm, border: 'none', background: saving || !f.duration ? S.bg : USERS[uid].accent, color: saving || !f.duration ? S.textSec : '#fff', fontSize: 16, fontWeight: 700, cursor: saving || !f.duration ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+        {saving ? 'Enregistrement...' : 'Enregistrer la séance'}
+      </button>
+    </div>
+  )
+}
 
+function SessionDetail({ session, uid, sessions, wellness }) {
+  const [analysis, setAnalysis] = useState(null)
+  const [loadingAnalysis, setLoadingAnalysis] = useState(true)
+  const [msgs, setMsgs] = useState([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const bottomRef = useRef()
+  useEffect(() => {
+    if (!session) return
+    const msg = `Analyse cette séance : ${session.discipline}, ${session.date}, ${session.duration}min${session.distance?`, ${session.distance}${session.distance_unit}`:''}${session.vitesse?`, ${session.vitesse}km/h`:''}, RPE ${session.rpe}/10${session.notes?`, notes: ${session.notes}`:''}.
+Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) Conseil prochain.`
+    askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: msg }])
+      .then(r => { setAnalysis(r); setLoadingAnalysis(false) })
+      .catch(() => { setAnalysis('Erreur lors de l\'analyse.'); setLoadingAnalysis(false) })
+  }, [session?.id])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+  async function send() {
+    if (!input.trim() || sending) return
+    const txt = input.trim(); setInput(''); setSending(true)
+    const history = msgs.map(m => ({ role: m.role, content: m.content }))
+    setMsgs(p => [...p, { role: 'user', content: txt }])
+    const reply = await askCoach(buildSystem(uid, sessions, wellness) + `\nContexte: discussion sur séance du ${session.date} — ${session.discipline}.`, [...history, { role: 'user', content: txt }])
+    setMsgs(p => [...p, { role: 'assistant', content: reply }])
+    setSending(false)
+  }
+  if (!session) return null
+  const color = discColor(session.discipline)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Discipline selector */}
-      <Card style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, color: T.textSecondary, marginBottom: 10, fontWeight: 500 }}>DISCIPLINE</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {DISCIPLINES.map(d => (
-            <Chip key={d} active={f.discipline === d} color={USERS[uid].color} onClick={() => set('discipline', d)}>
-              {ICONS[d]} {d}
-            </Chip>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: `1px solid ${S.border}` }}>
+        <div style={{ width: 50, height: 50, background: `${color}18`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <DiscIcon disc={session.discipline} size={26} color={color} />
+        </div>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: S.text }}>{session.discipline}</div>
+          <div style={{ fontSize: 13, color: S.textSec }}>{session.date}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        {[
+          { label: 'Durée', val: `${session.duration}min` },
+          { label: 'Distance', val: session.distance ? `${session.distance}${session.distance_unit}` : '—' },
+          { label: 'RPE', val: `${session.rpe}/10`, color },
+          session.vitesse ? { label: 'Vitesse', val: `${session.vitesse}km/h` } : null,
+          session.pace ? { label: 'Allure', val: session.pace } : null,
+          session.hr_avg ? { label: 'FC moy', val: `${session.hr_avg}bpm` } : null,
+        ].filter(Boolean).map((s, i) => (
+          <div key={i} style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 10px', textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: s.color || S.text }}>{s.val}</div>
+            <div style={{ fontSize: 10, color: S.textSec, marginTop: 3, fontWeight: 500 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {session.notes && <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 14px' }}><div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>NOTES</div><div style={{ fontSize: 14, color: S.text, lineHeight: 1.5 }}>{session.notes}</div></div>}
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Bot size={18} color={USERS[uid].accent} /> Analyse du coach</div>
+        {loadingAnalysis ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: S.textSec, fontSize: 14 }}><Loader2 size={16} /> Analyse en cours...</div>
+        ) : (
+          <div style={{ background: `${USERS[uid].accent}08`, border: `1px solid ${USERS[uid].accent}22`, borderRadius: S.radiusSm, padding: '14px 16px', fontSize: 14, lineHeight: 1.7, color: S.text, whiteSpace: 'pre-wrap' }}>{analysis}</div>
+        )}
+      </div>
+      {!loadingAnalysis && (
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><MessageSquare size={18} color={USERS[uid].accent} /> Discuter de cette séance</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, maxHeight: 250, overflowY: 'auto' }}>
+            {msgs.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? USERS[uid].accent : S.bg, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 14px', fontSize: 14, lineHeight: 1.6 }}>{m.content}</div>
+            ))}
+            {sending && <div style={{ alignSelf: 'flex-start', padding: '10px 14px', background: S.bg, borderRadius: 16, fontSize: 13, color: S.textSec }}>⏳</div>}
+            <div ref={bottomRef} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Pose une question sur cette séance..." style={{ ...inputStyle(), flex: 1 }} />
+            <button onClick={send} disabled={!input.trim() || sending} style={{ padding: '12px 16px', borderRadius: S.radiusSm, border: 'none', background: !input.trim() || sending ? S.bg : USERS[uid].accent, color: !input.trim() || sending ? S.textSec : '#fff', cursor: !input.trim() || sending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>↑</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HistoryPage({ uid, sessions, wellness, setSessions }) {
+  const [filter, setFilter] = useState('Toutes')
+  const [selected, setSelected] = useState(null)
+  const list = sessions.filter(s => s.user_id === uid && (filter === 'Toutes' || s.discipline === filter)).sort((a, b) => new Date(b.date) - new Date(a.date))
+  const deleteSession = async (id) => {
+    if (!window.confirm('Supprimer cette séance ?')) return
+    await supabase.from('sessions').delete().eq('id', id)
+    setSessions(prev => prev.filter(s => s.id !== id)); setSelected(null)
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 16 }}>
+        {['Toutes', ...DISCIPLINES].map(d => (
+          <button key={d} onClick={() => setFilter(d)} style={{ padding: '7px 14px', borderRadius: 99, border: `1.5px solid ${filter === d ? USERS[uid].accent : S.border}`, background: filter === d ? `${USERS[uid].accent}18` : S.card, color: filter === d ? USERS[uid].accent : S.textSec, fontSize: 12, fontWeight: filter === d ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>{d}</button>
+        ))}
+      </div>
+      <Card>
+        {list.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '30px 0', color: S.textSec }}><div style={{ fontSize: 14 }}>Aucune séance</div></div>
+        ) : list.map((s, i) => {
+          const color = discColor(s.discipline)
+          return (
+            <div key={s.id} onClick={() => setSelected(s)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < list.length - 1 ? `1px solid ${S.border}` : 'none', cursor: 'pointer' }}>
+              <div style={{ width: 46, height: 46, background: `${color}18`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><DiscIcon disc={s.discipline} size={22} color={color} /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>{s.discipline}</div>
+                <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
+              </div>
+              <div style={{ textAlign: 'right', marginRight: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
+                <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>
+              </div>
+              <ChevronRight size={16} color={S.textTer} />
+            </div>
+          )
+        })}
+      </Card>
+      <Sheet open={!!selected} onClose={() => setSelected(null)} title="Détail de la séance">
+        {selected && <>
+          <SessionDetail session={selected} uid={uid} sessions={sessions} wellness={wellness} />
+          <button onClick={() => deleteSession(selected.id)} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: S.radiusSm, border: `1px solid ${S.red}`, background: 'transparent', color: S.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
+        </>}
+      </Sheet>
+    </div>
+  )
+}
+
+function DuelPage({ sessions }) {
+  const getWeeks = (uid, disc) => {
+    const result = []; const now = new Date()
+    for (let i = 7; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay() + 1 - i * 7); start.setHours(0,0,0,0)
+      const end = new Date(start); end.setDate(start.getDate() + 7)
+      const ws = sessions.filter(s => s.user_id === uid && s.discipline === disc && new Date(s.date) >= start && new Date(s.date) < end)
+      result.push({ week: `S${8-i}`, val: +ws.reduce((a,s)=>a+(+s.distance||0),0).toFixed(1), min: ws.reduce((a,s)=>a+(s.duration||0),0) })
+    }
+    return result
+  }
+  const score = (uid) => {
+    const s = sessions.filter(x => x.user_id === uid)
+    const ws = weekStart(); const week = s.filter(x => new Date(x.date) >= ws)
+    const totalKm = s.filter(x=>['Course à pied','Vélo','Natation'].includes(x.discipline)).reduce((a,x)=>a+(+x.distance||0),0)
+    const rpe = week.length ? week.reduce((a,x)=>a+(x.rpe||0),0)/week.length : 0
+    return {
+      Volume: Math.round(Math.min(100, week.reduce((a,x)=>a+(x.duration||0),0)/3)),
+      Intensité: Math.round(Math.min(100,(rpe/10)*100)),
+      Régularité: Math.round(Math.min(100,(week.length/4)*100)),
+      Progression: Math.round(Math.min(100,s.length*5)),
+      Endurance: Math.round(Math.min(100,totalKm/2)),
+    }
+  }
+  const ls = score('louis'), rs = score('romain')
+  const radarData = Object.keys(ls).map(k => ({ subject: k, Louis: ls[k], Romain: rs[k] }))
+  const lTotal = Object.values(ls).reduce((a,v)=>a+v,0), rTotal = Object.values(rs).reduce((a,v)=>a+v,0)
+  const leader = lTotal >= rTotal ? 'louis' : 'romain'
+  const ChartCard = ({ title, disc }) => {
+    const lw = getWeeks('louis', disc), rw = getWeeks('romain', disc)
+    const data = lw.map((w,i) => ({ week: w.week, Louis: w.val, Romain: rw[i].val }))
+    return (
+      <Card style={{ marginBottom: 12 }}>
+        <Label>{title}</Label>
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
+            <XAxis dataKey="week" tick={{ fontSize: 10, fill: S.textSec }} />
+            <YAxis tick={{ fontSize: 10, fill: S.textSec }} />
+            <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v,n) => [`${v} km`, n]} />
+            <Line type="monotone" dataKey="Louis" stroke={ORANGE} strokeWidth={2} dot={{ fill: ORANGE, r: 3 }} />
+            <Line type="monotone" dataKey="Romain" stroke={BLUE} strokeWidth={2} dot={{ fill: BLUE, r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Card style={{ background: `${USERS[leader].accent}12`, border: `1.5px solid ${USERS[leader].accent}33` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Trophy size={32} color={USERS[leader].accent} />
+          <div>
+            <div style={{ fontSize: 13, color: S.textSec, fontWeight: 500 }}>En tête cette semaine</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: USERS[leader].accent }}>{USERS[leader].name}</div>
+          </div>
+          <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: USERS[leader].accent }}>{Math.max(lTotal,rTotal)}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>/500</span></div>
+            <div style={{ fontSize: 11, color: S.textSec }}>score total</div>
+          </div>
+        </div>
+      </Card>
+      <Card>
+        <Label>Comparaison globale — radar</Label>
+        <ResponsiveContainer width="100%" height={220}>
+          <RadarChart data={radarData}>
+            <PolarGrid stroke={S.border} />
+            <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: S.textSec }} />
+            <PolarRadiusAxis domain={[0,100]} tick={false} axisLine={false} />
+            <Radar name="Louis" dataKey="Louis" stroke={ORANGE} fill={ORANGE} fillOpacity={0.15} strokeWidth={2} />
+            <Radar name="Romain" dataKey="Romain" stroke={BLUE} fill={BLUE} fillOpacity={0.15} strokeWidth={2} />
+            <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 12 }} />
+          </RadarChart>
+        </ResponsiveContainer>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8 }}>
+          {['louis','romain'].map(uid => <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: USERS[uid].accent }}><div style={{ width: 12, height: 3, background: USERS[uid].accent, borderRadius: 99 }} />{USERS[uid].name}</div>)}
+        </div>
+      </Card>
+      <ChartCard title="Course à pied — km / semaine" disc="Course à pied" />
+      <ChartCard title="Vélo — km / semaine" disc="Vélo" />
+    </div>
+  )
+}
+
+function ChatPage({ uid, sessions, wellness }) {
+  const [msgs, setMsgs] = useState([{ role: 'assistant', content: `Bonjour ${USERS[uid].name} 👋\n\nJe suis ton coach. J'ai accès à tout ton historique.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...` }])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const bottomRef = useRef()
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+  async function send(text) {
+    const txt = (text || input).trim(); if (!txt || loading) return
+    setInput(''); setLoading(true)
+    setMsgs(p => [...p, { role: 'user', content: txt }])
+    try {
+      const history = msgs.map(m => ({ role: m.role, content: m.content }))
+      const reply = await askCoach(buildSystem(uid, sessions, wellness), [...history, { role: 'user', content: txt }])
+      setMsgs(p => [...p, { role: 'assistant', content: reply }])
+    } catch { setMsgs(p => [...p, { role: 'assistant', content: 'Erreur de connexion. Réessaie.' }]) }
+    setLoading(false)
+  }
+  const suggestions = ['Analyse ma semaine', 'Plan nutrition demain', 'Je suis épuisé', 'Programme du jour']
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100svh - 160px)', minHeight: 400 }}>
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 12 }}>
+        {msgs.map((m, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+            {m.role === 'assistant' && <div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>🤖</div>}
+            {m.role === 'user' && <Avatar uid={uid} size={30} />}
+            <div style={{ maxWidth: '80%', padding: '12px 16px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', background: m.role === 'user' ? USERS[uid].accent : S.card, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>{m.content}</div>
+          </div>
+        ))}
+        {loading && <div style={{ display: 'flex', gap: 10 }}><div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div><div style={{ padding: '12px 16px', background: S.card, borderRadius: '18px 18px 18px 4px', display: 'flex', gap: 5 }}>{[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: S.textTer, animation: `pulse 1.4s ${i*0.18}s ease-in-out infinite` }} />)}</div></div>}
+        <div ref={bottomRef} />
+      </div>
+      {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: S.card, borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()} placeholder="Message..." style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 15, color: S.text, outline: 'none', fontFamily: 'inherit' }} />
+        <button onClick={() => send()} disabled={loading || !input.trim()} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', flexShrink: 0, background: !input.trim() || loading ? S.bg : USERS[uid].accent, color: !input.trim() || loading ? S.textSec : '#fff', cursor: !input.trim() || loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>↑</button>
+      </div>
+    </div>
+  )
+}
+
+const PLAN = {
+  louis: [
+    { phase: 'Fondation', period: 'Juin – Août', detail: '3 séances/sem · Musculation gainage 2× · RPE 5–6', color: '#007AFF' },
+    { phase: 'Développement', period: 'Septembre – Octobre', detail: '4 séances/sem · Bricks introduits · +10%/sem', color: '#AF52DE' },
+    { phase: 'Spécifique', period: 'Novembre', detail: '5 séances/sem · Allures cibles · Gainage uniquement', color: '#FF9500' },
+    { phase: 'Affûtage', period: 'Décembre', detail: 'Volume −40% · Simulation course · Récupération', color: '#34C759' },
+  ],
+  romain: [
+    { phase: 'Fondation', period: 'Juin – Août', detail: '2 séances/sem · Courir 20min + nager 200m · RPE 4–5', color: '#007AFF' },
+    { phase: 'Développement', period: 'Septembre – Octobre', detail: '3 séances/sem · Vélo introduit · Premiers bricks', color: '#AF52DE' },
+    { phase: 'Spécifique', period: 'Novembre', detail: '4 séances/sem · Distances cibles atteintes', color: '#FF9500' },
+    { phase: 'Affûtage', period: 'Décembre', detail: 'Volume réduit · Confiance · Simulation course', color: '#34C759' },
+  ],
+}
+
+function PlanPage({ uid }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Card style={{ background: S.text, padding: '20px 20px' }}>
+        <div style={{ fontSize: 13, color: '#8E8E93', fontWeight: 500, marginBottom: 4 }}>Triathlon Sprint · Décembre 2026</div>
+        <div style={{ fontSize: 36, fontWeight: 900, color: USERS[uid].accent, letterSpacing: -1 }}>J-{daysLeft()}</div>
+        <div style={{ fontSize: 13, color: '#8E8E93', marginTop: 4 }}>750m · 20km · 5km</div>
+      </Card>
+      <Card>
+        <Label>Plan de périodisation</Label>
+        <div style={{ position: 'relative', paddingLeft: 24 }}>
+          <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2, background: S.border, borderRadius: 99 }} />
+          {PLAN[uid].map((p, i) => (
+            <div key={p.phase} style={{ position: 'relative', paddingBottom: i < PLAN[uid].length - 1 ? 20 : 0 }}>
+              <div style={{ position: 'absolute', left: -20, top: 2, width: 12, height: 12, borderRadius: '50%', background: p.color, border: `3px solid ${S.card}` }} />
+              <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{p.phase}</div>
+              <div style={{ fontSize: 12, color: p.color, fontWeight: 600, marginTop: 2 }}>{p.period}</div>
+              <div style={{ fontSize: 13, color: S.textSec, marginTop: 4, lineHeight: 1.5 }}>{p.detail}</div>
+            </div>
           ))}
         </div>
       </Card>
-
-      {/* Main fields */}
-      <Card style={{ padding: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>DATE</div>
-            <input type="date" value={f.date} onChange={e => set('date', e.target.value)} {...inp} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>DURÉE (min)</div>
-            <input type="number" value={f.duration} onChange={e => set('duration', e.target.value)} placeholder="45" {...inp} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>DISTANCE</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input type="number" value={f.distance} onChange={e => set('distance', e.target.value)} placeholder="5" style={{ ...inp.style, flex: 1, width: 'auto' }} />
-              <select value={f.distance_unit} onChange={e => set('distance_unit', e.target.value)} style={{ ...inp.style, width: 60 }}>
-                <option>km</option><option>m</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>ALLURE</div>
-            <input value={f.pace} onChange={e => set('pace', e.target.value)} placeholder="5:30/km" {...inp} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>FC MOY</div>
-            <input type="number" value={f.hr_avg} onChange={e => set('hr_avg', e.target.value)} placeholder="145" {...inp} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>FC MAX</div>
-            <input type="number" value={f.hr_max} onChange={e => set('hr_max', e.target.value)} placeholder="172" {...inp} />
-          </div>
-        </div>
-
-        {/* RPE */}
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 11, color: T.textSecondary, fontWeight: 500 }}>EFFORT PERÇU (RPE)</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: USERS[uid].color }}>{f.rpe}/10</span>
-          </div>
-          <input type="range" min="1" max="10" value={f.rpe} onChange={e => set('rpe', e.target.value)}
-            style={{ width: '100%', accentColor: USERS[uid].color }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.textTertiary, marginTop: 4 }}>
-            <span>Facile</span><span>Modéré</span><span>Maximum</span>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, color: T.textSecondary, marginBottom: 6, fontWeight: 500 }}>NOTES</div>
-          <textarea value={f.notes} onChange={e => set('notes', e.target.value)}
-            placeholder="Ressenti, observations..."
-            rows={3} style={{ ...inp.style, resize: 'vertical' }} />
-        </div>
-      </Card>
-
-      {/* Comparison */}
-      {last && (
-        <Card style={{ padding: 14, background: T.bgSecondary, boxShadow: 'none', border: 'none' }}>
-          <div style={{ fontSize: 11, color: T.textSecondary, fontWeight: 500, marginBottom: 8 }}>DERNIÈRE {f.discipline.toUpperCase()}</div>
-          <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
-            <span style={{ color: T.text }}><span style={{ color: T.textSecondary }}>Durée </span>{last.duration}min</span>
-            {last.distance && <span><span style={{ color: T.textSecondary }}>Distance </span>{last.distance}{last.distance_unit}</span>}
-            {delta !== null && (
-              <span style={{ fontWeight: 600, color: +delta >= 0 ? '#34c759' : '#ff3b30' }}>
-                {+delta >= 0 ? '+' : ''}{delta}%
-              </span>
-            )}
-          </div>
-        </Card>
-      )}
-
-      <Btn onClick={submit} disabled={loading || !f.duration} color={USERS[uid].color} style={{ width: '100%', padding: '13px 0', fontSize: 15 }}>
-        {loading ? 'Enregistrement...' : 'Enregistrer la séance'}
-      </Btn>
     </div>
   )
 }
 
-// ─── HISTORY ─────────────────────────────────────────────────────────────────
-function History({ uid, sessions }) {
-  const list = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10)
-  if (list.length === 0) return (
-    <Card style={{ textAlign: 'center', padding: 40 }}>
-      <div style={{ fontSize: 32, marginBottom: 8 }}>🏁</div>
-      <div style={{ fontSize: 15, color: T.text, fontWeight: 500 }}>Aucune séance encore</div>
-      <div style={{ fontSize: 13, color: T.textSecondary, marginTop: 4 }}>Enregistre ta première séance</div>
-    </Card>
-  )
+function Dashboard({ uid, sessions, wellness, onSave }) {
+  const ws = weekStart()
+  const week = sessions.filter(s => s.user_id === uid && new Date(s.date) >= ws)
+  const totalMin = week.reduce((a, s) => a + (s.duration || 0), 0)
+  const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
+  const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 13) * 100) : null
+  const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
+  const recent = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {list.map(s => (
-        <Card key={s.id} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: T.bgSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-            {ICONS[s.discipline]}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{s.discipline}</div>
-            <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 2 }}>{s.date}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{s.duration} min</div>
-            {s.distance && <div style={{ fontSize: 12, color: T.textSecondary }}>{s.distance}{s.distance_unit}</div>}
-          </div>
-          <Pill color={USERS[uid].color}>RPE {s.rpe}</Pill>
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-// ─── MILESTONES ───────────────────────────────────────────────────────────────
-function Milestones({ uid, sessions }) {
-  const ms = [
-    { disc: 'Natation', label: '750m sans s\'arrêter', target: 750, unit: 'm', conv: s => s.distance_unit === 'm' ? +s.distance : +s.distance * 1000 },
-    { disc: 'Vélo', label: '20km à rythme soutenu', target: 20, unit: 'km', conv: s => s.distance_unit === 'km' ? +s.distance : +s.distance / 1000 },
-    { disc: 'Course à pied', label: '5km sans marcher', target: 5, unit: 'km', conv: s => s.distance_unit === 'km' ? +s.distance : +s.distance / 1000 },
-  ]
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {ms.map(m => {
-        const best = sessions.filter(s => s.user_id === uid && s.discipline === m.disc && s.distance).reduce((max, s) => Math.max(max, m.conv(s)), 0)
-        const pct = Math.min(100, (best / m.target) * 100)
-        const done = pct >= 100
-        return (
-          <Card key={m.disc} style={{ padding: '16px 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{ICONS[m.disc]} {m.disc}</div>
-                <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 2 }}>{m.label}</div>
-              </div>
-              {done
-                ? <Pill color="#34c759">Atteint 🏆</Pill>
-                : <span style={{ fontSize: 13, fontWeight: 600, color: USERS[uid].color }}>{Math.round(pct)}%</span>
-              }
-            </div>
-            <Bar value={pct} max={100} color={done ? '#34c759' : USERS[uid].color} height={5} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        {[
+          { Icon: Calendar, val: week.length, label: 'Séances', color: USERS[uid].accent },
+          { Icon: Clock, val: `${Math.floor(totalMin/60)}h${String(totalMin%60).padStart(2,'0')}`, label: 'Volume', color: S.text },
+          { Icon: Heart, val: wellScore !== null ? `${wellScore}%` : '—', label: 'Bien-être', color: wellScore ? scoreColor : S.textSec },
+        ].map((s, i) => (
+          <Card key={i} style={{ padding: '14px 10px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}><s.Icon size={18} color={s.color} /></div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: s.color, letterSpacing: -0.5 }}>{s.val}</div>
+            <div style={{ fontSize: 10, color: S.textSec, marginTop: 3, fontWeight: 500 }}>{s.label}</div>
           </Card>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── DUEL ────────────────────────────────────────────────────────────────────
-function Duel({ sessions }) {
-  const ws = weekAgo()
-  const weekS = sessions.filter(s => new Date(s.date) >= ws)
-
-  const stats = uid => ({
-    count: weekS.filter(s => s.user_id === uid).length,
-    minutes: weekS.filter(s => s.user_id === uid).reduce((a, s) => a + (s.duration || 0), 0),
-    byDisc: DISCIPLINES.reduce((acc, d) => {
-      acc[d] = weekS.filter(s => s.user_id === uid && s.discipline === d).reduce((a, s) => a + (s.duration || 0), 0)
-      return acc
-    }, {}),
-  })
-
-  const ls = stats('louis')
-  const rs = stats('romain')
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Scores */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center' }}>
-        {['louis', 'romain'].map((uid, i) => {
-          const st = uid === 'louis' ? ls : rs
-          return (
-            <Card key={uid} style={{ padding: 20, textAlign: 'center', order: i === 1 ? 2 : 0 }}>
-              <Avatar uid={uid} size={44} />
-              <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginTop: 10 }}>{USERS[uid].name}</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: USERS[uid].color, marginTop: 4 }}>{st.count}</div>
-              <div style={{ fontSize: 11, color: T.textTertiary }}>séances</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginTop: 6 }}>
-                {Math.floor(st.minutes / 60)}h{String(st.minutes % 60).padStart(2, '0')}
-              </div>
-            </Card>
-          )
-        })}
-        <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, color: T.textTertiary, order: 1 }}>VS</div>
+        ))}
       </div>
-
-      {/* By discipline */}
-      <Card style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, color: T.textSecondary, fontWeight: 500, marginBottom: 14 }}>PAR DISCIPLINE — 7 DERNIERS JOURS</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {DISCIPLINES.slice(0, 4).map(d => {
-            const lm = ls.byDisc[d], rm = rs.byDisc[d], tot = lm + rm
-            const lpct = tot ? (lm / tot) * 100 : 50
-            if (lm === 0 && rm === 0) return null
+      <WellnessForm uid={uid} wellness={wellness} onSave={onSave} />
+      <Milestones uid={uid} sessions={sessions} />
+      {recent.length > 0 && (
+        <Card>
+          <Label>Activité récente</Label>
+          {recent.map((s, i) => {
+            const color = discColor(s.discipline)
             return (
-              <div key={d}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                  <span style={{ color: USERS.louis.color, fontWeight: 500 }}>{lm}min</span>
-                  <span style={{ color: T.textSecondary }}>{ICONS[d]} {d}</span>
-                  <span style={{ color: USERS.romain.color, fontWeight: 500 }}>{rm}min</span>
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i < recent.length - 1 ? `1px solid ${S.border}` : 'none' }}>
+                <div style={{ width: 40, height: 40, background: `${color}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><DiscIcon disc={s.discipline} size={20} color={color} /></div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: S.text }}>{s.discipline}</div>
+                  <div style={{ fontSize: 12, color: S.textSec }}>{s.date}</div>
                 </div>
-                <div style={{ height: 6, background: T.bgTertiary, borderRadius: 99, overflow: 'hidden', display: 'flex' }}>
-                  <div style={{ width: `${lpct}%`, background: USERS.louis.color, transition: 'width 0.5s' }} />
-                  <div style={{ flex: 1, background: USERS.romain.color }} />
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{s.duration}min</div>
+                  {s.distance && <div style={{ fontSize: 11, color: S.textSec }}>{s.distance}{s.distance_unit}</div>}
                 </div>
               </div>
             )
           })}
-          {ls.minutes === 0 && rs.minutes === 0 && (
-            <div style={{ textAlign: 'center', color: T.textTertiary, fontSize: 13, padding: 12 }}>
-              Aucune séance cette semaine
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-// ─── PLAN ────────────────────────────────────────────────────────────────────
-function Plan({ uid }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {PLAN[uid].map((p, i) => (
-        <Card key={p.phase} style={{ padding: '16px 18px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ width: 28, height: 28, borderRadius: '50%', background: USERS[uid].color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{p.phase}</span>
-              <Pill color={USERS[uid].color}>{p.weeks}</Pill>
-            </div>
-            <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.5 }}>{p.desc}</div>
-          </div>
         </Card>
-      ))}
-    </div>
-  )
-}
-
-// ─── AI CHAT ─────────────────────────────────────────────────────────────────
-function Chat({ uid, sessions, wellness }) {
-  const [msgs, setMsgs] = useState([{
-    role: 'assistant',
-    content: `Bonjour ${USERS[uid].name} 👋\n\nJe suis ton coach personnel. J'ai accès à tout ton historique d'entraînement.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, matériel, stratégie de course...`,
-  }])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const bottom = useRef()
-  const inputRef = useRef()
-
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
-
-  async function send() {
-    if (!input.trim() || loading) return
-    const txt = input.trim()
-    setInput('')
-    setMsgs(p => [...p, { role: 'user', content: txt }])
-    setLoading(true)
-    const history = msgs.slice(1).map(m => ({ role: m.role, content: m.content }))
-    const reply = await callClaude(buildSystem(uid, sessions, wellness), txt, history)
-    setMsgs(p => [...p, { role: 'assistant', content: reply }])
-    setLoading(false)
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }
-
-  const suggestions = [
-    'Analyse ma semaine',
-    'Conseils nutrition',
-    'Programme du jour',
-    'Je suis fatigué, que faire ?',
-  ]
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', minHeight: 400 }}>
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 12 }}>
-        {msgs.map((m, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-            {m.role === 'assistant' && (
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: T.bgSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🤖</div>
-            )}
-            {m.role === 'user' && <Avatar uid={uid} size={32} />}
-            <div style={{
-              maxWidth: '75%',
-              background: m.role === 'user' ? USERS[uid].color : T.bgSecondary,
-              color: m.role === 'user' ? '#fff' : T.text,
-              borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              padding: '12px 16px', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-            }}>{m.content}</div>
-          </div>
-        ))}
-        {loading && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: T.bgSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🤖</div>
-            <div style={{ background: T.bgSecondary, borderRadius: '18px 18px 18px 4px', padding: '12px 16px' }}>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[0, 1, 2].map(i => (
-                  <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: T.textTertiary, animation: `bounce 1.2s ${i * 0.2}s infinite` }} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={bottom} />
-      </div>
-
-      {/* Suggestions */}
-      {msgs.length <= 1 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          {suggestions.map(s => (
-            <button key={s} onClick={() => { setInput(s); inputRef.current?.focus() }}
-              style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${T.border}`, background: T.bg, color: T.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {s}
-            </button>
-          ))}
-        </div>
       )}
-
-      {/* Input */}
-      <div style={{ display: 'flex', gap: 10, background: T.bgSecondary, borderRadius: 14, padding: '8px 8px 8px 16px', alignItems: 'center' }}>
-        <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Envoie un message..."
-          style={{ flex: 1, border: 'none', background: 'transparent', color: T.text, fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-        <button onClick={send} disabled={loading || !input.trim()}
-          style={{
-            width: 36, height: 36, borderRadius: '50%', border: 'none',
-            background: loading || !input.trim() ? T.bgTertiary : USERS[uid].color,
-            color: loading || !input.trim() ? T.textTertiary : '#fff',
-            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0,
-          }}>↑</button>
-      </div>
     </div>
   )
 }
 
-// ─── ANALYSIS MODAL ───────────────────────────────────────────────────────────
-function Modal({ text, onClose }) {
-  if (!text) return null
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 20 }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: T.bg, borderRadius: 20, padding: 28, maxWidth: 500, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: T.text }}>Analyse du coach</div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: T.bgSecondary, color: T.textSecondary, cursor: 'pointer', fontSize: 16 }}>×</button>
-        </div>
-        <div style={{ fontSize: 14, lineHeight: 1.7, color: T.text, whiteSpace: 'pre-wrap' }}>{text}</div>
-      </div>
-    </div>
-  )
-}
-
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
-function Dashboard({ uid, sessions, wellness, onSave }) {
-  const ws = weekAgo()
-  const weekS = sessions.filter(s => s.user_id === uid && new Date(s.date) >= ws)
-  const totalMin = weekS.reduce((a, s) => a + (s.duration || 0), 0)
-  const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
-  const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 13) * 100) : null
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-      {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-        <StatCard label="Séances" value={weekS.length} sub="cette semaine" color={USERS[uid].color} />
-        <StatCard label="Volume" value={`${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')}`} sub="cette semaine" />
-        <StatCard label="Bien-être" value={wellScore !== null ? `${wellScore}%` : '—'} sub="aujourd'hui" color={wellScore >= 70 ? '#34c759' : wellScore >= 40 ? '#ff9500' : '#ff3b30'} />
-      </div>
-
-      <Section title="Check-in">
-        <WellnessForm uid={uid} wellness={wellness} onSave={onSave} />
-      </Section>
-
-      <Section title="Jalons">
-        <Milestones uid={uid} sessions={sessions} />
-      </Section>
-
-      <Section title="Historique">
-        <History uid={uid} sessions={sessions} />
-      </Section>
-    </div>
-  )
-}
-
-// ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [uid, setUid] = useState('louis')
   const [tab, setTab] = useState('home')
   const [sessions, setSessions] = useState([])
   const [wellness, setWellness] = useState([])
   const [analysis, setAnalysis] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [booting, setBooting] = useState(true)
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     const [{ data: s }, { data: w }] = await Promise.all([
       supabase.from('sessions').select('*').order('date', { ascending: false }),
       supabase.from('wellness').select('*').order('date', { ascending: false }),
     ])
-    setSessions(s || [])
-    setWellness(w || [])
-    setLoading(false)
+    setSessions(s || []); setWellness(w || []); setBooting(false)
   }, [])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { load() }, [load])
 
   async function handleAnalyze(session, last) {
-    const msg = `Analyse cette séance :
-Discipline : ${session.discipline} | Durée : ${session.duration}min | Distance : ${session.distance || 'N/A'}${session.distance_unit || ''} | RPE : ${session.rpe}/10
-Notes : ${session.notes || 'aucune'}
-${last ? `\nDernière ${session.discipline} (${last.date}) : ${last.duration}min, ${last.distance || 'N/A'}${last.distance_unit || ''}, RPE ${last.rpe}/10` : '\nPremière séance de ce type.'}
-Donne une analyse en 4–5 lignes : feedback, progression, conseil.`
-    const reply = await callClaude(buildSystem(uid, sessions, wellness), msg)
-    setAnalysis(reply)
+    try {
+      const msg = `Séance : ${session.discipline}, ${session.duration}min${session.distance?`, ${session.distance}${session.distance_unit}`:''}, RPE ${session.rpe}/10.${session.notes?` Notes: ${session.notes}.`:''}${last?` Dernière (${last.date}): ${last.duration}min, RPE ${last.rpe}/10.`:''} Analyse en 4 lignes max.`
+      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: msg }])
+      setAnalysis(reply)
+    } catch {}
   }
 
   const tabs = [
-    { id: 'home', label: 'Accueil', icon: '◉' },
-    { id: 'session', label: 'Séance', icon: '+' },
-    { id: 'coach', label: 'Coach', icon: '💬' },
-    { id: 'plan', label: 'Plan', icon: '📅' },
-    { id: 'duel', label: 'Duel', icon: '⚡' },
+    { id: 'home', label: 'Accueil', Icon: Home },
+    { id: 'session', label: 'Séance', Icon: Plus },
+    { id: 'coach', label: 'Coach', Icon: Bot },
+    { id: 'history', label: 'Historique', Icon: Activity },
+    { id: 'plan', label: 'Plan', Icon: Calendar },
+    { id: 'duel', label: 'Duel', Icon: Swords },
   ]
 
-  const tabTitles = { home: 'Bonjour,', session: 'Nouvelle séance', coach: 'Coach IA', plan: 'Plan d\'entraînement', duel: 'Duel cette semaine' }
+  const titles = { home: null, session: 'Nouvelle séance', coach: 'Coach IA', history: 'Historique', plan: 'Plan', duel: 'Duel' }
 
   return (
-    <div style={{ background: T.bgSecondary, minHeight: '100vh', fontFamily: '-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif' }}>
+    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: '-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif', color: S.text }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 0; }
-        input[type=range] { -webkit-appearance: none; height: 4px; border-radius: 99px; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: currentColor; cursor: pointer; }
-        @keyframes bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+        @keyframes pulse { 0%,60%,100% { opacity:0.3; transform:scale(0.8) } 30% { opacity:1; transform:scale(1) } }
         button { -webkit-tap-highlight-color: transparent; }
+        input:focus, textarea:focus, select:focus { border-color: #C7C7CC !important; }
       `}</style>
 
-      {/* HEADER */}
-      <div style={{ background: T.bg, borderBottom: `1px solid ${T.borderLight}`, position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: '16px 20px' }}>
-          {/* User switcher */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 12, color: T.textSecondary, marginBottom: 2 }}>{tabTitles[tab]}</div>
-              {tab === 'home' && <div style={{ fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: -0.5 }}>{USERS[uid].name} 👋</div>}
-              {tab !== 'home' && <div style={{ fontSize: 20, fontWeight: 600, color: T.text }}>{tabTitles[tab]}</div>}
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(242,242,247,0.92)', backdropFilter: 'blur(20px) saturate(180%)', borderBottom: `1px solid ${S.border}` }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {tab === 'home' ? (
+              <>
+                <div style={{ fontSize: 13, color: S.textSec, fontWeight: 500 }}>Bonjour,</div>
+                <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5 }}>{USERS[uid].name} 👋</div>
+              </>
+            ) : <div style={{ fontSize: 20, fontWeight: 700 }}>{titles[tab]}</div>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: S.text, borderRadius: 10, padding: '5px 11px', textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent, lineHeight: 1 }}>J‑{daysLeft()}</div>
+              <div style={{ fontSize: 9, color: '#8E8E93', letterSpacing: '0.06em' }}>COURSE</div>
             </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              {/* Days left */}
-              <div style={{ textAlign: 'center', padding: '6px 12px', background: T.bgSecondary, borderRadius: T.radiusSm, marginRight: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: USERS[uid].color }}>J-{daysLeft()}</div>
-                <div style={{ fontSize: 9, color: T.textTertiary, letterSpacing: 0.5 }}>COURSE</div>
-              </div>
-              {['louis', 'romain'].map(u => (
-                <button key={u} onClick={() => setUid(u)} style={{
-                  width: 36, height: 36, borderRadius: '50%', border: uid === u ? `2px solid ${USERS[u].color}` : '2px solid transparent',
-                  background: USERS[u].color, color: '#fff', fontWeight: 700, fontSize: 14,
-                  cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit',
-                  opacity: uid === u ? 1 : 0.4,
-                }}>{USERS[u].avatar}</button>
+            <div style={{ display: 'flex', background: S.border, borderRadius: 99, padding: 3, gap: 2 }}>
+              {['louis','romain'].map(u => (
+                <button key={u} onClick={() => setUid(u)} style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: uid === u ? USERS[u].accent : 'transparent', color: uid === u ? '#fff' : S.textSec, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>{USERS[u].avatar}</button>
               ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '24px 20px 100px' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 60, color: T.textTertiary }}>Chargement...</div>
-        ) : (
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 110px' }}>
+        {booting ? <div style={{ textAlign: 'center', padding: 60, color: S.textSec }}>Chargement...</div> : (
           <>
-            {tab === 'home' && <Dashboard uid={uid} sessions={sessions} wellness={wellness} onSave={fetch} />}
-            {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={fetch} onAnalyze={handleAnalyze} />}
-            {tab === 'coach' && <Chat uid={uid} sessions={sessions} wellness={wellness} />}
-            {tab === 'plan' && <Plan uid={uid} />}
-            {tab === 'duel' && <Duel sessions={sessions} />}
+            {tab === 'home' && <Dashboard uid={uid} sessions={sessions} wellness={wellness} onSave={load} />}
+            {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
+            {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} />}
+            {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
+            {tab === 'plan' && <PlanPage uid={uid} />}
+            {tab === 'duel' && <DuelPage sessions={sessions} />}
           </>
         )}
       </div>
 
-      {/* BOTTOM NAV */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px) saturate(180%)',
-        borderTop: `1px solid ${T.borderLight}`,
-        display: 'flex', paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
-      }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            color: tab === t.id ? USERS[uid].color : T.textTertiary,
-          }}>
-            <span style={{ fontSize: t.id === 'session' ? 22 : 18 }}>{t.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: tab === t.id ? 600 : 400 }}>{t.label}</span>
-          </button>
-        ))}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(242,242,247,0.95)', backdropFilter: 'blur(20px) saturate(180%)', borderTop: `1px solid ${S.border}`, display: 'flex', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
+        {tabs.map(t => {
+          const active = tab === t.id
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '10px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: active ? USERS[uid].accent : S.textTer, transition: 'color 0.12s' }}>
+              {t.id === 'session' ? (
+                <div style={{ width: 32, height: 32, background: active ? USERS[uid].accent : S.textTer, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
+                  <Plus size={18} color="#fff" />
+                </div>
+              ) : <t.Icon size={22} color={active ? USERS[uid].accent : S.textTer} />}
+              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400 }}>{t.label}</span>
+            </button>
+          )
+        })}
       </div>
 
-      <Modal text={analysis} onClose={() => setAnalysis(null)} />
+      <Sheet open={!!analysis} onClose={() => setAnalysis(null)} title="Analyse du coach">
+        {analysis && <div style={{ fontSize: 14, lineHeight: 1.75, color: S.text, whiteSpace: 'pre-wrap' }}>{analysis}</div>}
+      </Sheet>
     </div>
   )
 }
