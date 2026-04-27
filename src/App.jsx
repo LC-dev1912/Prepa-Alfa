@@ -8,7 +8,8 @@ import {
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+  LineChart, BarChart, Bar, Line, XAxis, YAxis, Tooltip, Legend,
+  ResponsiveContainer, CartesianGrid
 } from 'recharts'
 
 const ORANGE = '#FC4C02'
@@ -795,6 +796,8 @@ function ProfilePage({ uid, sessions }) {
   const [showShoeForm, setShowShoeForm] = useState(false)
   const [newShoe, setNewShoe] = useState({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
   const [hrMax, setHrMax] = useLocalStorage(`hrMax_${uid}`, '')
+  const [weights, setWeights] = useLocalStorage(`weights_${uid}`, [])
+  const [newWeight, setNewWeight] = useState('')
 
   const userSessions = sessions.filter(s => s.user_id === uid)
 
@@ -865,6 +868,39 @@ function ProfilePage({ uid, sessions }) {
     const bestKm = ds.reduce((mx, s) => Math.max(mx, toKm(s)), 0)
     return { disc, icon, unit, totalKm: Math.round(totalKm * 10) / 10, bestKm: Math.round(bestKm * 10) / 10, count: ds.length }
   })
+
+  // Chart data — last 12 weeks
+  const weeklyChartData = (() => {
+    const now = new Date()
+    return Array.from({ length: 12 }, (_, i) => {
+      const start = new Date(now)
+      start.setDate(now.getDate() - now.getDay() + 1 - (11 - i) * 7)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(start); end.setDate(start.getDate() + 7)
+      const ws = userSessions.filter(s => { const d = new Date(s.date); return d >= start && d < end })
+      const byDisc = d => ws.filter(s => s.discipline === d)
+      const natDist = s => s.distance_unit === 'm' ? +s.distance : +s.distance * 1000
+      const allRpe = ws.filter(s => s.rpe).map(s => +s.rpe)
+      return {
+        week: `S${i + 1}`,
+        Course: byDisc('Course à pied').reduce((a, s) => a + (s.duration || 0), 0),
+        Vélo: byDisc('Vélo').reduce((a, s) => a + (s.duration || 0), 0),
+        Natation: byDisc('Natation').reduce((a, s) => a + (s.duration || 0), 0),
+        CourseKm: +byDisc('Course à pied').filter(s => s.distance).reduce((a, s) => a + (s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance), 0).toFixed(1),
+        VéloKm: +byDisc('Vélo').filter(s => s.distance).reduce((a, s) => a + +s.distance, 0).toFixed(1),
+        NatM: +byDisc('Natation').filter(s => s.distance).reduce((a, s) => a + natDist(s), 0).toFixed(0),
+        rpe: allRpe.length ? +(allRpe.reduce((a, v) => a + v, 0) / allRpe.length).toFixed(1) : null,
+      }
+    })
+  })()
+  const rpeData8 = weeklyChartData.slice(-8)
+  const hasChartData = weeklyChartData.some(w => w.Course || w.Vélo || w.Natation)
+
+  const addWeight = () => {
+    if (!newWeight) return
+    setWeights(prev => [...prev, { date: todayStr(), weight: +newWeight }].slice(-60))
+    setNewWeight('')
+  }
 
   // HR zones
   const zones = hrMax ? [
@@ -1042,6 +1078,88 @@ function ProfilePage({ uid, sessions }) {
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* ── Progression charts ── */}
+      {hasChartData && (
+        <Card>
+          <Label>Volume hebdomadaire (min) — 12 semaines</Label>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={weeklyChartData} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
+              <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} interval={2} />
+              <YAxis tick={{ fontSize: 9, fill: S.textSec }} width={30} />
+              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={(v, n) => [`${v} min`, n]} />
+              <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
+              <Line type="monotone" dataKey="Course" name="Course à pied" stroke={ORANGE} strokeWidth={2} dot={false} connectNulls />
+              <Line type="monotone" dataKey="Vélo" name="Vélo" stroke="#FF9500" strokeWidth={2} dot={false} connectNulls />
+              <Line type="monotone" dataKey="Natation" name="Natation" stroke="#007AFF" strokeWidth={2} dot={false} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
+      {hasChartData && (
+        <Card>
+          <Label>Distance hebdomadaire — 12 semaines</Label>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={weeklyChartData} margin={{ top: 4, right: 28, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
+              <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} interval={2} />
+              <YAxis yAxisId="km" tick={{ fontSize: 9, fill: S.textSec }} width={30} />
+              <YAxis yAxisId="m" orientation="right" tick={{ fontSize: 9, fill: S.textSec }} width={30} />
+              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={(v, n) => [n === 'Natation (m)' ? `${v} m` : `${v} km`, n]} />
+              <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
+              <Line yAxisId="km" type="monotone" dataKey="CourseKm" name="Course (km)" stroke={ORANGE} strokeWidth={2} dot={false} connectNulls />
+              <Line yAxisId="km" type="monotone" dataKey="VéloKm" name="Vélo (km)" stroke="#FF9500" strokeWidth={2} dot={false} connectNulls />
+              <Line yAxisId="m" type="monotone" dataKey="NatM" name="Natation (m)" stroke="#007AFF" strokeWidth={2} dot={false} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
+      {rpeData8.some(w => w.rpe !== null) && (
+        <Card>
+          <Label>Charge d'entraînement — RPE moyen / semaine</Label>
+          <ResponsiveContainer width="100%" height={150}>
+            <BarChart data={rpeData8} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
+              <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} />
+              <YAxis tick={{ fontSize: 9, fill: S.textSec }} domain={[0, 10]} width={22} ticks={[0, 2, 4, 6, 8, 10]} />
+              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={v => [v ?? '—', 'RPE moyen']} />
+              <Bar dataKey="rpe" name="RPE moyen" fill={USERS[uid].accent} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
+      <Card>
+        <Label>Suivi du poids</Label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: weights.length > 1 ? 14 : 10 }}>
+          <input type="number" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={e => e.key === 'Enter' && addWeight()} placeholder="Poids (kg)" style={{ ...inputStyle(), flex: 1 }} />
+          <button onClick={addWeight} style={{ padding: '12px 18px', borderRadius: S.radiusSm, border: 'none', background: USERS[uid].accent, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 16 }}>+</button>
+        </div>
+        {weights.length > 1 ? (
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={weights.slice(-20)} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: S.textSec }} tickFormatter={d => d.slice(5)} />
+              <YAxis tick={{ fontSize: 9, fill: S.textSec }} domain={['auto', 'auto']} width={32} />
+              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={v => [`${v} kg`, 'Poids']} />
+              <Line type="monotone" dataKey="weight" stroke={USERS[uid].accent} strokeWidth={2} dot={{ fill: USERS[uid].accent, r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ textAlign: 'center', fontSize: 13, color: S.textSec, padding: '4px 0 8px' }}>
+            {weights.length === 0 ? 'Ajoute ta première mesure' : 'Ajoute une 2ᵉ mesure pour afficher le graphique'}
+          </div>
+        )}
+        {weights.length > 0 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: S.textSec, display: 'flex', justifyContent: 'space-between' }}>
+            <span>Dernière : <strong style={{ color: S.text }}>{weights[weights.length - 1].weight} kg</strong></span>
+            <span>{weights[weights.length - 1].date}</span>
+          </div>
+        )}
       </Card>
 
       {/* ── HR Zones ── */}
