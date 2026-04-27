@@ -796,6 +796,7 @@ function ProfilePage({ uid, sessions }) {
   const [showShoeForm, setShowShoeForm] = useState(false)
   const [newShoe, setNewShoe] = useState({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
   const [hrMax, setHrMax] = useLocalStorage(`hrMax_${uid}`, '')
+  const [hrRest, setHrRest] = useLocalStorage(`hrRest_${uid}`, '')
   const [weights, setWeights] = useLocalStorage(`weights_${uid}`, [])
   const [newWeight, setNewWeight] = useState('')
 
@@ -903,14 +904,19 @@ function ProfilePage({ uid, sessions }) {
   }
   const deleteWeight = (idx) => setWeights(prev => prev.filter((_, i) => i !== idx))
 
-  // HR zones
-  const zones = hrMax ? [
-    { name: 'Z1 — Récupération', pct: '50–60%', range: [Math.round(+hrMax * 0.5), Math.round(+hrMax * 0.6)], color: S.green },
-    { name: 'Z2 — Endurance', pct: '60–70%', range: [Math.round(+hrMax * 0.6), Math.round(+hrMax * 0.7)], color: '#007AFF' },
-    { name: 'Z3 — Aérobie', pct: '70–80%', range: [Math.round(+hrMax * 0.7), Math.round(+hrMax * 0.8)], color: S.yellow },
-    { name: 'Z4 — Seuil', pct: '80–90%', range: [Math.round(+hrMax * 0.8), Math.round(+hrMax * 0.9)], color: ORANGE },
-    { name: 'Z5 — VO2max', pct: '90–100%', range: [Math.round(+hrMax * 0.9), +hrMax], color: S.red },
-  ] : []
+  // HR zones — Karvonen formula: zone = hrRest + (hrMax - hrRest) × pct
+  const zones = hrMax ? (() => {
+    const max = +hrMax, rest = hrRest ? +hrRest : 0
+    const hrr = max - rest  // heart rate reserve
+    const k = (lo, hi) => [Math.round(rest + hrr * lo), Math.round(rest + hrr * hi)]
+    return [
+      { name: 'Z1 — Récupération', pct: '50–60%', range: k(0.5, 0.6), color: S.green,   desc: 'Récupération active, brûle les graisses' },
+      { name: 'Z2 — Endurance',    pct: '60–70%', range: k(0.6, 0.7), color: '#007AFF', desc: 'Base aérobie, endurance fondamentale' },
+      { name: 'Z3 — Tempo',        pct: '70–80%', range: k(0.7, 0.8), color: S.yellow,  desc: 'Améliore l\'efficacité cardiovasculaire' },
+      { name: 'Z4 — Seuil',        pct: '80–90%', range: k(0.8, 0.9), color: ORANGE,    desc: 'Repousse le seuil lactique' },
+      { name: 'Z5 — VMA/Max',      pct: '90–100%', range: k(0.9, 1.0), color: S.red,    desc: 'VO2max, effort maximal court' },
+    ]
+  })() : []
 
   const exportCSV = () => {
     const headers = ['date', 'discipline', 'duration', 'distance', 'distance_unit', 'pace', 'hr_avg', 'hr_max', 'rpe', 'conditions', 'notes']
@@ -1172,19 +1178,31 @@ function ProfilePage({ uid, sessions }) {
 
       {/* ── HR Zones ── */}
       <Card>
-        <Label>Zones de fréquence cardiaque</Label>
-        <div style={{ marginBottom: 12 }}>
-          <input type="number" value={hrMax} onChange={e => setHrMax(e.target.value)} placeholder="FC max (bpm)" style={inputStyle()} />
+        <Label>Zones de fréquence cardiaque — Karvonen</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>FC MAX (bpm)</div>
+            <input type="number" value={hrMax} onChange={e => setHrMax(e.target.value)} placeholder="190" style={inputStyle()} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>FC REPOS (bpm)</div>
+            <input type="number" value={hrRest} onChange={e => setHrRest(e.target.value)} placeholder="55" style={inputStyle()} />
+          </div>
         </div>
+        {hrMax && !hrRest && (
+          <div style={{ fontSize: 11, color: S.textSec, marginBottom: 10, padding: '8px 12px', background: S.bg, borderRadius: 8 }}>
+            💡 Ajoute ta FC au repos (matin au réveil) pour des zones plus précises
+          </div>
+        )}
         {zones.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {zones.map(z => (
-              <div key={z.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: `${z.color}12`, borderRadius: S.radiusSm }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: z.color }}>{z.name}</div>
-                  <div style={{ fontSize: 10, color: S.textSec }}>{z.pct}</div>
+              <div key={z.name} style={{ padding: '10px 14px', background: `${z.color}12`, borderRadius: S.radiusSm }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: z.color }}>{z.name} <span style={{ fontSize: 10, fontWeight: 400, color: S.textSec }}>{z.pct}</span></div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: S.text }}>{z.range[0]}–{z.range[1]} <span style={{ fontSize: 11, fontWeight: 400, color: S.textSec }}>bpm</span></div>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: S.text }}>{z.range[0]}–{z.range[1]} <span style={{ fontSize: 11, fontWeight: 400, color: S.textSec }}>bpm</span></div>
+                <div style={{ fontSize: 11, color: S.textSec, marginTop: 3 }}>{z.desc}</div>
               </div>
             ))}
           </div>
