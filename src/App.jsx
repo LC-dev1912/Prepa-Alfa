@@ -791,155 +791,226 @@ function PlanPage({ uid, sessions, wellness }) {
 }
 
 function ProfilePage({ uid, sessions }) {
-  const [weights, setWeights] = useLocalStorage(`weights_${uid}`, [])
-  const [newWeight, setNewWeight] = useState('')
+  const [shoes, setShoes] = useLocalStorage(`shoes_${uid}`, [])
+  const [showShoeForm, setShowShoeForm] = useState(false)
+  const [newShoe, setNewShoe] = useState({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
   const [hrMax, setHrMax] = useLocalStorage(`hrMax_${uid}`, '')
-  const [fitnessTests, setFitnessTests] = useLocalStorage(`fitnessTests_${uid}`, { vma: '', ftp: '', cooper: '' })
 
-  const userSessions = sessions.filter(s => s.user_id === uid).sort((a, b) => a.date.localeCompare(b.date))
+  const userSessions = sessions.filter(s => s.user_id === uid)
 
-  const getStreak = () => {
-    let streak = 0
-    const d = new Date()
-    while (true) {
-      const ds = d.toISOString().slice(0, 10)
-      if (userSessions.some(s => s.date === ds)) { streak++; d.setDate(d.getDate() - 1) }
-      else break
-    }
-    return streak
+  // km accumulated by a shoe = startKm + sessions after purchaseDate
+  const shoeKm = (shoe) => {
+    const start = +shoe.startKm || 0
+    const fromSessions = userSessions
+      .filter(s => s.discipline === 'Course à pied' && s.date >= shoe.purchaseDate && s.distance)
+      .reduce((a, s) => a + (s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance), 0)
+    return start + fromSessions
   }
-  const streak = getStreak()
 
+  const addShoe = () => {
+    if (!newShoe.name) return
+    setShoes(prev => [...prev, { ...newShoe, id: Date.now(), archived: false }])
+    setNewShoe({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
+    setShowShoeForm(false)
+  }
+  const archiveShoe = (id) => setShoes(prev => prev.map(s => s.id === id ? { ...s, archived: true } : s))
+  const deleteShoe = (id) => { if (window.confirm('Supprimer cette paire ?')) setShoes(prev => prev.filter(s => s.id !== id)) }
+
+  const activeShoes = shoes.filter(s => !s.archived)
+  const archivedShoes = shoes.filter(s => s.archived)
+
+  // Global stats
+  const totalMin = userSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const discStats = [
+    { disc: 'Course à pied', icon: '🏃', unit: 'km' },
+    { disc: 'Vélo', icon: '🚴', unit: 'km' },
+    { disc: 'Natation', icon: '🏊', unit: 'km' },
+  ].map(({ disc, icon, unit }) => {
+    const ds = userSessions.filter(s => s.discipline === disc && s.distance)
+    const toKm = s => s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance
+    const totalKm = ds.reduce((a, s) => a + toKm(s), 0)
+    const bestKm = ds.reduce((mx, s) => Math.max(mx, toKm(s)), 0)
+    return { disc, icon, unit, totalKm: Math.round(totalKm * 10) / 10, bestKm: Math.round(bestKm * 10) / 10, count: ds.length }
+  })
+
+  // HR zones
   const zones = hrMax ? [
-    { name: 'Z1 — Récupération', range: [Math.round(+hrMax * 0.5), Math.round(+hrMax * 0.6)], color: S.green },
-    { name: 'Z2 — Endurance', range: [Math.round(+hrMax * 0.6), Math.round(+hrMax * 0.7)], color: '#007AFF' },
-    { name: 'Z3 — Aérobie', range: [Math.round(+hrMax * 0.7), Math.round(+hrMax * 0.8)], color: S.yellow },
-    { name: 'Z4 — Seuil', range: [Math.round(+hrMax * 0.8), Math.round(+hrMax * 0.9)], color: ORANGE },
-    { name: 'Z5 — VO2max', range: [Math.round(+hrMax * 0.9), +hrMax], color: S.red },
+    { name: 'Z1 — Récupération', pct: '50–60%', range: [Math.round(+hrMax * 0.5), Math.round(+hrMax * 0.6)], color: S.green },
+    { name: 'Z2 — Endurance', pct: '60–70%', range: [Math.round(+hrMax * 0.6), Math.round(+hrMax * 0.7)], color: '#007AFF' },
+    { name: 'Z3 — Aérobie', pct: '70–80%', range: [Math.round(+hrMax * 0.7), Math.round(+hrMax * 0.8)], color: S.yellow },
+    { name: 'Z4 — Seuil', pct: '80–90%', range: [Math.round(+hrMax * 0.8), Math.round(+hrMax * 0.9)], color: ORANGE },
+    { name: 'Z5 — VO2max', pct: '90–100%', range: [Math.round(+hrMax * 0.9), +hrMax], color: S.red },
   ] : []
 
-  const badges = [
-    { label: 'Première séance', icon: '🏅', earned: userSessions.length >= 1 },
-    { label: '10 séances', icon: '🥈', earned: userSessions.length >= 10 },
-    { label: '25 séances', icon: '🥇', earned: userSessions.length >= 25 },
-    { label: 'Série 3 jours', icon: '🔥', earned: streak >= 3 },
-    { label: 'Série 7 jours', icon: '⚡', earned: streak >= 7 },
-    { label: 'Premier 5km', icon: '🏃', earned: userSessions.some(s => s.discipline === 'Course à pied' && +s.distance >= 5) },
-    { label: 'Premier 750m nat.', icon: '🏊', earned: userSessions.some(s => s.discipline === 'Natation' && ((s.distance_unit === 'm' && +s.distance >= 750) || (s.distance_unit === 'km' && +s.distance >= 0.75))) },
-    { label: 'Premier 20km vélo', icon: '🚴', earned: userSessions.some(s => s.discipline === 'Vélo' && +s.distance >= 20) },
-  ]
-
   const exportCSV = () => {
-    const headers = ['date', 'discipline', 'duration', 'distance', 'distance_unit', 'pace', 'vitesse', 'hr_avg', 'hr_max', 'rpe', 'notes']
-    const rows = userSessions.map(s => headers.map(h => (s[h] ?? '')).join(','))
+    const headers = ['date', 'discipline', 'duration', 'distance', 'distance_unit', 'pace', 'hr_avg', 'hr_max', 'rpe', 'conditions', 'notes']
+    const sorted = [...userSessions].sort((a, b) => a.date.localeCompare(b.date))
+    const rows = sorted.map(s => headers.map(h => {
+      const v = s[h] ?? ''
+      return typeof v === 'string' && v.includes(',') ? `"${v}"` : v
+    }).join(','))
     const csv = [headers.join(','), ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `seances_${uid}.csv`; a.click()
+    const a = document.createElement('a'); a.href = url; a.download = `seances_${uid}_${todayStr()}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 
-  const addWeight = () => {
-    if (!newWeight) return
-    setWeights(prev => [...prev, { date: todayStr(), weight: +newWeight }].slice(-50))
-    setNewWeight('')
-  }
-
-  const recentWeights = weights.slice(-12)
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card style={{ background: streak >= 3 ? `${ORANGE}12` : S.card, border: streak >= 3 ? `1.5px solid ${ORANGE}33` : 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ fontSize: 36 }}>{streak >= 3 ? '🔥' : '⏰'}</div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: streak >= 3 ? ORANGE : S.text }}>{streak} jour{streak !== 1 ? 's' : ''}</div>
-            <div style={{ fontSize: 13, color: S.textSec }}>Série en cours</div>
-          </div>
-          <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: S.text }}>{userSessions.length}</div>
-            <div style={{ fontSize: 11, color: S.textSec }}>séances totales</div>
-          </div>
+
+      {/* ── Shoe tracking ── */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: activeShoes.length > 0 ? 16 : 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: S.textSec, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Chaussures de course</div>
+          <button onClick={() => setShowShoeForm(true)} style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: USERS[uid].accent, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>+ Ajouter</button>
         </div>
+
+        {activeShoes.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: S.textSec, fontSize: 13 }}>Aucune paire enregistrée</div>
+        )}
+
+        {activeShoes.map((shoe, idx) => {
+          const km = shoeKm(shoe)
+          const maxKm = +shoe.maxKm || 700
+          const pct = (km / maxKm) * 100
+          const isWorn = pct >= 100
+          const isAlert = pct >= 80
+          const barColor = isWorn ? S.red : isAlert ? S.yellow : S.green
+          return (
+            <div key={shoe.id} style={{ paddingTop: idx === 0 ? 0 : 16, paddingBottom: 16, borderBottom: idx < activeShoes.length - 1 || archivedShoes.length > 0 ? `1px solid ${S.border}` : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{shoe.name}</div>
+                  <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>
+                    {[shoe.brand, shoe.purchaseDate].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: isWorn ? S.red : isAlert ? S.yellow : S.text }}>{Math.round(km)} km</div>
+                  <div style={{ fontSize: 11, color: S.textSec }}>/ {maxKm} km</div>
+                </div>
+              </div>
+              <PBar pct={pct} color={barColor} h={8} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                {isWorn
+                  ? <span style={{ fontSize: 12, fontWeight: 700, color: S.red }}>🔴 À remplacer</span>
+                  : isAlert
+                    ? <span style={{ fontSize: 12, fontWeight: 600, color: S.yellow }}>🟡 Fin de vie ({Math.round(pct)}%)</span>
+                    : <span style={{ fontSize: 12, color: S.textSec }}>{Math.round(pct)}% de la durée de vie</span>
+                }
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => archiveShoe(shoe.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${S.border}`, background: 'transparent', color: S.textSec, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Archiver</button>
+                  <button onClick={() => deleteShoe(shoe.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${S.border}`, background: 'transparent', color: S.red, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {archivedShoes.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11, color: S.textTer, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>Archivées ({archivedShoes.length})</div>
+            {archivedShoes.map(shoe => (
+              <div key={shoe.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', opacity: 0.5 }}>
+                <span style={{ fontSize: 13, color: S.textSec }}>{shoe.name}</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: S.textTer }}>{Math.round(shoeKm(shoe))} km</span>
+                  <button onClick={() => deleteShoe(shoe.id)} style={{ padding: '3px 8px', borderRadius: 6, border: `1px solid ${S.border}`, background: 'transparent', color: S.textSec, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
+      {/* Add shoe sheet */}
+      <Sheet open={showShoeForm} onClose={() => setShowShoeForm(false)} title="Nouvelle paire">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 20 }}>
+          <div>
+            <Label>Nom *</Label>
+            <input value={newShoe.name} onChange={e => setNewShoe(p => ({ ...p, name: e.target.value }))} placeholder="Nike Pegasus 41" style={inputStyle()} />
+          </div>
+          <div>
+            <Label>Marque</Label>
+            <input value={newShoe.brand} onChange={e => setNewShoe(p => ({ ...p, brand: e.target.value }))} placeholder="Nike" style={inputStyle()} />
+          </div>
+          <div>
+            <Label>Date d'achat</Label>
+            <input type="date" value={newShoe.purchaseDate} onChange={e => setNewShoe(p => ({ ...p, purchaseDate: e.target.value }))} style={inputStyle()} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <Label>Km de départ</Label>
+              <input type="number" value={newShoe.startKm} onChange={e => setNewShoe(p => ({ ...p, startKm: e.target.value }))} placeholder="0" style={inputStyle()} />
+            </div>
+            <div>
+              <Label>Km max</Label>
+              <input type="number" value={newShoe.maxKm} onChange={e => setNewShoe(p => ({ ...p, maxKm: e.target.value }))} placeholder="700" style={inputStyle()} />
+            </div>
+          </div>
+          <button onClick={addShoe} disabled={!newShoe.name} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: newShoe.name ? USERS[uid].accent : S.bg, color: newShoe.name ? '#fff' : S.textSec, fontSize: 15, fontWeight: 700, cursor: newShoe.name ? 'pointer' : 'not-allowed', fontFamily: 'inherit', marginTop: 4 }}>
+            Enregistrer
+          </button>
+        </div>
+      </Sheet>
+
+      {/* ── Global stats ── */}
       <Card>
-        <Label>Badges</Label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {badges.map(b => (
-            <div key={b.label} style={{ width: 72, padding: '10px 6px', borderRadius: 12, background: b.earned ? `${USERS[uid].accent}15` : S.bg, border: `1px solid ${b.earned ? USERS[uid].accent : S.border}`, opacity: b.earned ? 1 : 0.4, textAlign: 'center' }}>
-              <div style={{ fontSize: 22 }}>{b.icon}</div>
-              <div style={{ fontSize: 9, color: b.earned ? USERS[uid].accent : S.textSec, fontWeight: 600, marginTop: 5, lineHeight: 1.3 }}>{b.label}</div>
+        <Label>Statistiques globales</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: USERS[uid].accent }}>{userSessions.length}</div>
+            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>séances totales</div>
+          </div>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: USERS[uid].accent }}>{Math.round(totalMin / 60 * 10) / 10}h</div>
+            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>d'entraînement</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {discStats.map(ds => (
+            <div key={ds.disc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: S.bg, borderRadius: S.radiusSm }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <DiscIcon disc={ds.disc} size={18} color={discColor(ds.disc)} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{ds.disc}</div>
+                  <div style={{ fontSize: 11, color: S.textSec }}>{ds.count} séance{ds.count !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: S.text }}>{ds.totalKm} km</div>
+                {ds.bestKm > 0 && <div style={{ fontSize: 10, color: S.textSec }}>record {ds.bestKm} km</div>}
+              </div>
             </div>
           ))}
         </div>
       </Card>
 
+      {/* ── HR Zones ── */}
       <Card>
-        <Label>Suivi du poids</Label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <input type="number" value={newWeight} onChange={e => setNewWeight(e.target.value)} placeholder="Poids (kg)" style={{ ...inputStyle(), flex: 1 }} onKeyDown={e => e.key === 'Enter' && addWeight()} />
-          <button onClick={addWeight} style={{ padding: '12px 20px', borderRadius: S.radiusSm, border: 'none', background: USERS[uid].accent, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 18 }}>+</button>
-        </div>
-        {recentWeights.length > 1 ? (
-          <ResponsiveContainer width="100%" height={120}>
-            <LineChart data={recentWeights}>
-              <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: S.textSec }} tickFormatter={d => d.slice(5)} />
-              <YAxis tick={{ fontSize: 9, fill: S.textSec }} domain={['auto', 'auto']} width={32} />
-              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 12 }} formatter={v => [`${v} kg`, 'Poids']} />
-              <Line type="monotone" dataKey="weight" stroke={USERS[uid].accent} strokeWidth={2} dot={{ fill: USERS[uid].accent, r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{ textAlign: 'center', fontSize: 13, color: S.textSec, padding: '10px 0' }}>Ajoute au moins 2 mesures pour afficher le graphique</div>
-        )}
-        {weights.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: 13, color: S.textSec, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Dernière mesure : <strong style={{ color: S.text }}>{weights[weights.length - 1].weight} kg</strong></span>
-            <span>{weights[weights.length - 1].date}</span>
-          </div>
-        )}
-      </Card>
-
-      <Card>
-        <Label>Zones FC</Label>
-        <div style={{ marginBottom: 14 }}>
+        <Label>Zones de fréquence cardiaque</Label>
+        <div style={{ marginBottom: 12 }}>
           <input type="number" value={hrMax} onChange={e => setHrMax(e.target.value)} placeholder="FC max (bpm)" style={inputStyle()} />
         </div>
         {zones.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {zones.map(z => (
               <div key={z.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: `${z.color}12`, borderRadius: S.radiusSm }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: z.color }}>{z.name}</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: S.text }}>{z.range[0]}–{z.range[1]} bpm</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: z.color }}>{z.name}</div>
+                  <div style={{ fontSize: 10, color: S.textSec }}>{z.pct}</div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: S.text }}>{z.range[0]}–{z.range[1]} <span style={{ fontSize: 11, fontWeight: 400, color: S.textSec }}>bpm</span></div>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', fontSize: 13, color: S.textSec }}>Entre ta FC max pour voir tes zones</div>
+          <div style={{ textAlign: 'center', fontSize: 13, color: S.textSec }}>Entre ta FC max pour calculer tes zones</div>
         )}
       </Card>
 
-      <Card>
-        <Label>Tests physiques</Label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            { key: 'vma', label: 'VMA (km/h)', placeholder: '13.5', hint: 'Vitesse Maximale Aérobie' },
-            { key: 'ftp', label: 'FTP vélo (W)', placeholder: '200', hint: 'Functional Threshold Power' },
-            { key: 'cooper', label: 'Test de Cooper (m)', placeholder: '2800', hint: 'Distance en 12 min' },
-          ].map(t => (
-            <div key={t.key}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{t.label}</span>
-                <span style={{ fontSize: 11, color: S.textSec }}>{t.hint}</span>
-              </div>
-              <input type="number" value={fitnessTests[t.key]} onChange={e => setFitnessTests(p => ({ ...p, [t.key]: e.target.value }))} placeholder={t.placeholder} style={inputStyle()} />
-            </div>
-          ))}
-        </div>
-      </Card>
-
+      {/* ── CSV Export ── */}
       <button onClick={exportCSV} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: `1.5px solid ${S.border}`, background: S.card, color: S.text, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <Download size={16} /> Exporter mes séances (CSV)
       </button>
