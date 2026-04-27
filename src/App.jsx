@@ -798,6 +798,40 @@ function ProfilePage({ uid, sessions }) {
 
   const userSessions = sessions.filter(s => s.user_id === uid)
 
+  // Streaks — iterate over sorted unique training dates
+  const { currentStreak, bestStreak } = (() => {
+    const dates = [...new Set(userSessions.map(s => s.date))].sort()
+    if (!dates.length) return { currentStreak: 0, bestStreak: 0 }
+    let best = 1, cur = 1
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1]), next = new Date(dates[i])
+      const diff = (next - prev) / 86400000
+      cur = diff === 1 ? cur + 1 : 1
+      if (cur > best) best = cur
+    }
+    // check if streak reaches today or yesterday
+    const lastDate = new Date(dates[dates.length - 1])
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const diffFromToday = (today - lastDate) / 86400000
+    const activeCur = diffFromToday <= 1 ? cur : 0
+    return { currentStreak: activeCur, bestStreak: best }
+  })()
+
+  // Badges
+  const totalMin = userSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const badges = [
+    { icon: '🔥', label: '7j streak', earned: bestStreak >= 7, desc: '7 jours consécutifs' },
+    { icon: '🔥', label: '30j streak', earned: bestStreak >= 30, desc: '30 jours consécutifs' },
+    { icon: '🏅', label: '10 séances', earned: userSessions.length >= 10, desc: '10 séances enregistrées' },
+    { icon: '🏅', label: '50 séances', earned: userSessions.length >= 50, desc: '50 séances enregistrées' },
+    { icon: '🏊', label: '750m natation', earned: userSessions.some(s => s.discipline === 'Natation' && s.distance && (s.distance_unit === 'm' ? +s.distance >= 750 : +s.distance >= 0.75)), desc: '750m en une séance' },
+    { icon: '🚴', label: '20km vélo', earned: userSessions.some(s => s.discipline === 'Vélo' && +s.distance >= 20), desc: '20km en une séance' },
+    { icon: '🏃', label: '5km course', earned: userSessions.some(s => s.discipline === 'Course à pied' && +s.distance >= 5), desc: '5km en une séance' },
+    { icon: '⚡', label: '1er Brick', earned: userSessions.some(s => s.discipline === 'Brick'), desc: 'Première séance Brick' },
+    { icon: '⏱', label: '+1000min', earned: totalMin >= 1000, desc: '1000 min d\'entraînement' },
+  ]
+  const earnedCount = badges.filter(b => b.earned).length
+
   // km accumulated by a shoe = startKm + sessions after purchaseDate
   const shoeKm = (shoe) => {
     const start = +shoe.startKm || 0
@@ -820,7 +854,6 @@ function ProfilePage({ uid, sessions }) {
   const archivedShoes = shoes.filter(s => s.archived)
 
   // Global stats
-  const totalMin = userSessions.reduce((a, s) => a + (s.duration || 0), 0)
   const discStats = [
     { disc: 'Course à pied', icon: '🏃', unit: 'km' },
     { disc: 'Vélo', icon: '🚴', unit: 'km' },
@@ -954,6 +987,30 @@ function ProfilePage({ uid, sessions }) {
           </button>
         </div>
       </Sheet>
+
+      {/* ── Streaks & Badges ── */}
+      <Card>
+        <Label>Série & badges</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ background: currentStreak >= 7 ? `${ORANGE}12` : S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center', border: currentStreak >= 7 ? `1px solid ${ORANGE}33` : 'none' }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: currentStreak >= 3 ? ORANGE : S.text }}>{currentStreak}j</div>
+            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>série actuelle</div>
+          </div>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: S.text }}>{bestStreak}j</div>
+            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>meilleur streak</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: S.textSec, marginBottom: 10 }}>{earnedCount}/{badges.length} badges débloqués</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {badges.map(b => (
+            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 74, padding: '10px 6px', borderRadius: 12, background: b.earned ? `${USERS[uid].accent}15` : S.bg, border: `1.5px solid ${b.earned ? USERS[uid].accent : S.border}`, opacity: b.earned ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+              <div style={{ fontSize: 22 }}>{b.icon}</div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: b.earned ? USERS[uid].accent : S.textSec, marginTop: 5, textAlign: 'center', lineHeight: 1.3 }}>{b.label}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* ── Global stats ── */}
       <Card>
