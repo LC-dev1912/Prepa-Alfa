@@ -31,9 +31,14 @@ const EXERCISE_SUGGESTIONS = [
 ]
 
 function useLocalStorage(key, initial) {
+  const initialRef = useRef(initial)
   const [val, setVal] = useState(() => {
-    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : initial } catch { return initial }
+    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : initialRef.current } catch { return initialRef.current }
   })
+  // Re-read from localStorage whenever the key changes (e.g. uid switch)
+  useEffect(() => {
+    try { const s = localStorage.getItem(key); setVal(s !== null ? JSON.parse(s) : initialRef.current) } catch { setVal(initialRef.current) }
+  }, [key])
   const update = useCallback((v) => {
     setVal(prev => {
       const next = typeof v === 'function' ? v(prev) : v
