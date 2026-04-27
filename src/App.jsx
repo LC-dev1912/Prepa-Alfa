@@ -901,6 +901,7 @@ function ProfilePage({ uid, sessions }) {
     setWeights(prev => [...prev, { date: todayStr(), weight: +newWeight }].slice(-60))
     setNewWeight('')
   }
+  const deleteWeight = (idx) => setWeights(prev => prev.filter((_, i) => i !== idx))
 
   // HR zones
   const zones = hrMax ? [
@@ -1155,9 +1156,16 @@ function ProfilePage({ uid, sessions }) {
           </div>
         )}
         {weights.length > 0 && (
-          <div style={{ marginTop: 8, fontSize: 12, color: S.textSec, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Dernière : <strong style={{ color: S.text }}>{weights[weights.length - 1].weight} kg</strong></span>
-            <span>{weights[weights.length - 1].date}</span>
+          <div style={{ marginTop: 12, maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {[...weights].reverse().map((w, i) => (
+              <div key={weights.length - 1 - i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderRadius: 8, background: i === 0 ? `${USERS[uid].accent}10` : 'transparent' }}>
+                <span style={{ fontSize: 13, fontWeight: i === 0 ? 700 : 400, color: S.text }}>{w.weight} kg</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, color: S.textSec }}>{w.date}</span>
+                  <button onClick={() => deleteWeight(weights.length - 1 - i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: S.textTer, lineHeight: 1, padding: 2, fontSize: 14 }}>×</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>
