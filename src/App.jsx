@@ -687,25 +687,156 @@ function DuelPage({ sessions }) {
 }
 
 function ChatPage({ uid, sessions, wellness }) {
-  const [msgs, setMsgs] = useState([{ role: 'assistant', content: `Bonjour ${USERS[uid].name} 👋\n\nJe suis ton coach. J'ai accès à tout ton historique.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...` }])
+  const makeWelcome = (u) => ({ role: 'assistant', content: `Bonjour ${USERS[u].name} 👋\n\nJe suis ton coach. J'ai accès à tout ton historique.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...` })
+  const [view, setView] = useState('list')
+  const [convList, setConvList] = useState([])
+  const [convId, setConvId] = useState(null)
+  const [msgs, setMsgs] = useState([makeWelcome(uid)])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingList, setLoadingList] = useState(true)
   const bottomRef = useRef()
+  const convIdRef = useRef(null)
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+
+  useEffect(() => {
+    async function loadConvs() {
+      setLoadingList(true)
+      const { data } = await supabase
+        .from('conversations')
+        .select('id, title, updated_at, messages')
+        .eq('user_id', uid)
+        .order('updated_at', { ascending: false })
+      setConvList(data || [])
+      setLoadingList(false)
+    }
+    loadConvs()
+    setView('list')
+    setConvId(null)
+    convIdRef.current = null
+    setMsgs([makeWelcome(uid)])
+    setInput('')
+  }, [uid])
+
+  function startNewConv() {
+    setConvId(null)
+    convIdRef.current = null
+    setMsgs([makeWelcome(uid)])
+    setInput('')
+    setView('chat')
+  }
+
+  function openConv(conv) {
+    setConvId(conv.id)
+    convIdRef.current = conv.id
+    setMsgs(conv.messages || [makeWelcome(uid)])
+    setView('chat')
+  }
+
+  async function deleteConv(id, e) {
+    e.stopPropagation()
+    await supabase.from('conversations').delete().eq('id', id)
+    setConvList(p => p.filter(c => c.id !== id))
+    if (convIdRef.current === id) {
+      setConvId(null)
+      convIdRef.current = null
+      setView('list')
+    }
+  }
+
   async function send(text) {
-    const txt = (text || input).trim(); if (!txt || loading) return
-    setInput(''); setLoading(true)
-    setMsgs(p => [...p, { role: 'user', content: txt }])
+    const txt = (text || input).trim()
+    if (!txt || loading) return
+    setInput('')
+    setLoading(true)
+    const newUserMsg = { role: 'user', content: txt }
+    const newMsgs = [...msgs, newUserMsg]
+    setMsgs(newMsgs)
+
+    const isFirstUserMsg = !msgs.some(m => m.role === 'user')
+    const title = isFirstUserMsg ? txt.slice(0, 40) : null
+
     try {
       const history = msgs.map(m => ({ role: m.role, content: m.content }))
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [...history, { role: 'user', content: txt }])
-      setMsgs(p => [...p, { role: 'assistant', content: reply }])
-    } catch { setMsgs(p => [...p, { role: 'assistant', content: 'Erreur de connexion. Réessaie.' }]) }
+      const reply = await askCoach(buildSystem(uid, sessions, wellness), [...history, newUserMsg])
+      const replyMsg = { role: 'assistant', content: reply }
+      const finalMsgs = [...newMsgs, replyMsg]
+      setMsgs(finalMsgs)
+
+      let cid = convIdRef.current
+      if (!cid) {
+        const { data } = await supabase
+          .from('conversations')
+          .insert({ user_id: uid, title: title || 'Conversation', messages: finalMsgs, updated_at: new Date().toISOString() })
+          .select('id')
+          .single()
+        if (data) {
+          cid = data.id
+          setConvId(data.id)
+          convIdRef.current = data.id
+          setConvList(p => [{ id: data.id, title: title || 'Conversation', updated_at: new Date().toISOString(), messages: finalMsgs }, ...p])
+        }
+      } else {
+        await supabase
+          .from('conversations')
+          .update({ messages: finalMsgs, updated_at: new Date().toISOString() })
+          .eq('id', cid)
+        setConvList(p => p.map(c => c.id === cid ? { ...c, messages: finalMsgs, updated_at: new Date().toISOString() } : c))
+      }
+    } catch {
+      setMsgs(p => [...p, { role: 'assistant', content: 'Erreur de connexion. Réessaie.' }])
+    }
     setLoading(false)
   }
+
   const suggestions = ['Analyse ma semaine', 'Plan nutrition demain', 'Je suis épuisé', 'Programme du jour']
+
+  function fmtDate(iso) {
+    const d = new Date(iso)
+    const diff = Date.now() - d
+    if (diff < 86400000) return "Aujourd'hui"
+    if (diff < 172800000) return 'Hier'
+    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  }
+
+  if (view === 'list') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <button onClick={startNewConv} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: USERS[uid].accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <MessageSquare size={16} /> Nouvelle conversation
+        </button>
+        {loadingList ? (
+          <div style={{ textAlign: 'center', padding: 40, color: S.textSec }}>Chargement...</div>
+        ) : convList.length === 0 ? (
+          <Card><div style={{ textAlign: 'center', padding: '20px 0', color: S.textSec, fontSize: 14 }}>Aucune conversation pour l'instant.</div></Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 18px 4px' }}><Label>Conversations récentes</Label></div>
+            {convList.map((c, i) => (
+              <div key={c.id} onClick={() => openConv(c)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderBottom: i < convList.length - 1 ? `1px solid ${S.border}` : 'none', cursor: 'pointer' }}>
+                <div style={{ width: 36, height: 36, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>🤖</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: S.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title || 'Conversation'}</div>
+                  <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{fmtDate(c.updated_at)}</div>
+                </div>
+                <button onClick={(e) => deleteConv(c.id, e)} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: S.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </Card>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100svh - 160px)', minHeight: 400 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
+        <button onClick={() => setView('list')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: USERS[uid].accent, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, padding: 0 }}>← Conversations</button>
+        <button onClick={startNewConv} style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '6px 12px', borderRadius: 99, fontWeight: 600 }}><Plus size={13} /> Nouveau</button>
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 12 }}>
         {msgs.map((m, i) => (
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
@@ -717,8 +848,8 @@ function ChatPage({ uid, sessions, wellness }) {
         {loading && <div style={{ display: 'flex', gap: 10 }}><div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div><div style={{ padding: '12px 16px', background: S.card, borderRadius: '18px 18px 18px 4px', display: 'flex', gap: 5 }}>{[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: S.textTer, animation: `pulse 1.4s ${i * 0.18}s ease-in-out infinite` }} />)}</div></div>}
         <div ref={bottomRef} />
       </div>
-      {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}</div>}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: S.card, borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+      {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, flexShrink: 0 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: S.card, borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', flexShrink: 0 }}>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()} placeholder="Message..." style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 15, color: S.text, outline: 'none', fontFamily: 'inherit' }} />
         <button onClick={() => send()} disabled={loading || !input.trim()} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', flexShrink: 0, background: !input.trim() || loading ? S.bg : USERS[uid].accent, color: !input.trim() || loading ? S.textSec : '#fff', cursor: !input.trim() || loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>↑</button>
       </div>
