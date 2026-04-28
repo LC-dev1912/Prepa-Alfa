@@ -1700,9 +1700,9 @@ export default function App() {
             {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
             {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} />}
             {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
-            {tab === 'plan' && <PlanPage uid={uid} sessions={sessions} wellness={wellness} />}
+            {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} />}
             {tab === 'duel' && <DuelPage sessions={sessions} />}
-            {tab === 'profil' && <ProfilePage uid={uid} sessions={sessions} />}
+            {tab === 'profil' && <ProfilePage key={uid} uid={uid} sessions={sessions} />}
           </>
         )}
       </div>
