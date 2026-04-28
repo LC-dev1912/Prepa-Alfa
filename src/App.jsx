@@ -4,7 +4,8 @@ import {
   Waves, Bike, Footprints, Dumbbell, Zap, HeartPulse,
   Home, Plus, Bot, Calendar, Swords, Activity,
   Trophy, Clock, ChevronRight, Heart, X,
-  Loader2, MessageSquare, User, Download, TrendingUp, Flame, Award
+  Loader2, MessageSquare, User, Download, TrendingUp, Flame, Award,
+  Timer, Play, Pause, RotateCcw, AlertTriangle, Utensils, Target
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -218,6 +219,14 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
     brickTransitions: [''],
   })
   const [saving, setSaving] = useState(false)
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [timerSec, setTimerSec] = useState(0)
+  const timerRef = useRef(null)
+  useEffect(() => {
+    if (timerRunning) { timerRef.current = setInterval(() => setTimerSec(s => s + 1), 1000) }
+    else { clearInterval(timerRef.current) }
+    return () => clearInterval(timerRef.current)
+  }, [timerRunning])
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   const disc = f.discipline
   const last = sessions.filter(s => s.user_id === uid && s.discipline === disc).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
@@ -341,6 +350,23 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
               </button>
             )
           })}
+        </div>
+      </Card>
+
+      <Card style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Timer size={16} color={timerRunning ? USERS[uid].accent : S.textSec} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: S.text }}>Chronomètre</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {timerSec > 0 && <span style={{ fontSize: 22, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: timerRunning ? USERS[uid].accent : S.text }}>{String(Math.floor(timerSec / 60)).padStart(2, '0')}:{String(timerSec % 60).padStart(2, '0')}</span>}
+            {timerSec > 0 && !timerRunning && (
+              <button onClick={() => { set('duration', String(Math.round(timerSec / 60))); setTimerRunning(false); setTimerSec(0) }} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', background: S.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Utiliser</button>
+            )}
+            {timerSec > 0 && <button onClick={() => { setTimerRunning(false); setTimerSec(0) }} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: S.bg, color: S.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RotateCcw size={12} /></button>}
+            <button onClick={() => setTimerRunning(r => !r)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: timerRunning ? USERS[uid].accent : S.bg, color: timerRunning ? '#fff' : S.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{timerRunning ? <Pause size={15} /> : <Play size={15} />}</button>
+          </div>
         </div>
       </Card>
 
@@ -879,18 +905,57 @@ const PLAN = {
 
 function PlanPage({ uid, sessions, wellness }) {
   const [aiPlan, setAiPlan] = useLocalStorage(`aiPlan_${uid}`, null)
+  const [aiNutrition, setAiNutrition] = useLocalStorage(`aiNutrition_${uid}`, null)
+  const [simTarget, setSimTarget] = useLocalStorage(`simTarget_${uid}`, { h: '1', m: '30' })
   const [generating, setGenerating] = useState(false)
+  const [generatingNutrition, setGeneratingNutrition] = useState(false)
+
+  // Calendrier semaine
+  const weekDays = (() => {
+    const ws = weekStart()
+    const names = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(ws); d.setDate(ws.getDate() + i)
+      const dateStr = d.toISOString().slice(0, 10)
+      return { date: dateStr, name: names[i], num: d.getDate(), isToday: d.getTime() === today.getTime(), isPast: d < today, sessions: sessions.filter(s => s.user_id === uid && s.date === dateStr) }
+    })
+  })()
+
+  // Simulateur de course
+  const simTotal = (+simTarget.h * 3600) + (+simTarget.m * 60)
+  const simCalc = simTotal > 60 ? (() => {
+    const fmt = s => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}` }
+    const fmtP = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
+    const nat = Math.round(simTotal * 0.115), t1 = Math.round(simTotal * 0.025)
+    const velo = Math.round(simTotal * 0.43), t2 = Math.round(simTotal * 0.020)
+    const cap = simTotal - nat - t1 - velo - t2
+    return [
+      { label: 'Natation 750m', time: fmt(nat), detail: `${fmtP(nat / 7.5)}/100m`, color: discColor('Natation') },
+      { label: 'Transition 1', time: fmt(t1), detail: '—', color: S.textSec },
+      { label: 'Vélo 20km', time: fmt(velo), detail: `${(20 / (velo / 3600)).toFixed(1)} km/h`, color: discColor('Vélo') },
+      { label: 'Transition 2', time: fmt(t2), detail: '—', color: S.textSec },
+      { label: 'Course 5km', time: fmt(cap), detail: `${fmtP(cap / 5)}/km`, color: discColor('Course à pied') },
+    ]
+  })() : null
 
   async function generateWeek() {
     setGenerating(true)
     try {
-      const prompt = `Génère-moi un planning d'entraînement complet pour la semaine prochaine. Tiens compte de mes séances récentes, de mon niveau de fatigue, et de l'objectif triathlon Sprint en décembre 2026. Donne-moi 5 à 6 séances précises avec : discipline, durée, intensité (RPE cible), objectif de la séance et un conseil clé. Sois concret et adapté à mon niveau actuel.`
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: prompt }])
+      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: `Génère-moi un planning d'entraînement complet pour la semaine prochaine. Tiens compte de mes séances récentes, de mon niveau de fatigue, et de l'objectif triathlon Sprint en décembre 2026. Donne-moi 5 à 6 séances précises avec : discipline, durée, intensité (RPE cible), objectif de la séance et un conseil clé. Sois concret et adapté à mon niveau actuel.` }])
       setAiPlan(reply)
-    } catch {
-      setAiPlan('Erreur lors de la génération. Réessaie.')
-    }
+    } catch { setAiPlan('Erreur lors de la génération. Réessaie.') }
     setGenerating(false)
+  }
+
+  async function generateNutrition() {
+    setGeneratingNutrition(true)
+    try {
+      const weekMins = sessions.filter(s => s.user_id === uid && new Date(s.date) >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0)
+      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: `Génère mon plan nutritionnel pour les 7 prochains jours. Volume d'entraînement cette semaine : ${weekMins} minutes. Pour chaque jour donne : calories totales, protéines (g), glucides (g), lipides (g), et 2-3 repas/collations clés. Mets en avant les jours de grosse séance vs jours de repos. Sois concret, en français, format structuré.` }])
+      setAiNutrition(reply)
+    } catch { setAiNutrition('Erreur lors de la génération. Réessaie.') }
+    setGeneratingNutrition(false)
   }
 
   return (
@@ -899,6 +964,64 @@ function PlanPage({ uid, sessions, wellness }) {
         <div style={{ fontSize: 13, color: '#8E8E93', fontWeight: 500, marginBottom: 4 }}>Triathlon Sprint · Décembre 2026</div>
         <div style={{ fontSize: 36, fontWeight: 900, color: USERS[uid].accent, letterSpacing: -1 }}>J-{daysLeft()}</div>
         <div style={{ fontSize: 13, color: '#8E8E93', marginTop: 4 }}>750m · 20km · 5km</div>
+      </Card>
+
+      {/* Calendrier semaine */}
+      <Card>
+        <Label>Calendrier de la semaine</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          {weekDays.map(day => (
+            <div key={day.date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', borderRadius: S.radiusSm, background: day.isToday ? `${USERS[uid].accent}15` : 'transparent', border: `1.5px solid ${day.isToday ? USERS[uid].accent + '55' : 'transparent'}` }}>
+              <div style={{ fontSize: 9, color: S.textSec, fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{day.name}</div>
+              <div style={{ fontSize: 15, fontWeight: day.isToday ? 800 : 500, color: day.isToday ? USERS[uid].accent : S.text, marginBottom: 5 }}>{day.num}</div>
+              {day.sessions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  {day.sessions.slice(0, 2).map((s, i) => (
+                    <div key={i} style={{ width: 22, height: 22, borderRadius: 7, background: `${discColor(s.discipline)}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <DiscIcon disc={s.discipline} size={11} color={discColor(s.discipline)} />
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.reduce((a, s) => a + (s.duration || 0), 0)}m</div>
+                </div>
+              ) : (
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: day.isPast ? S.border : `${S.textTer}40` }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Simulateur de course */}
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Target size={15} color={USERS[uid].accent} />
+          <Label>Simulateur triathlon Sprint</Label>
+        </div>
+        <div style={{ fontSize: 12, color: S.textSec, marginBottom: 10 }}>Temps total objectif</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <input type="number" value={simTarget.h} onChange={e => setSimTarget(p => ({ ...p, h: e.target.value }))} min="0" max="5" style={inputStyle({ textAlign: 'center' })} />
+            <div style={{ fontSize: 10, color: S.textSec, textAlign: 'center', marginTop: 4 }}>heures</div>
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: S.textSec, paddingBottom: 22 }}>:</div>
+          <div style={{ flex: 1 }}>
+            <input type="number" value={simTarget.m} onChange={e => setSimTarget(p => ({ ...p, m: e.target.value }))} min="0" max="59" style={inputStyle({ textAlign: 'center' })} />
+            <div style={{ fontSize: 10, color: S.textSec, textAlign: 'center', marginTop: 4 }}>minutes</div>
+          </div>
+        </div>
+        {simCalc && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {simCalc.map((item, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: `${item.color}12`, borderRadius: S.radiusSm, borderLeft: `3px solid ${item.color}` }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{item.label}</div>
+                  {item.detail !== '—' && <div style={{ fontSize: 11, color: S.textSec, marginTop: 1 }}>{item.detail}</div>}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: S.text }}>{item.time}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -914,6 +1037,21 @@ function PlanPage({ uid, sessions, wellness }) {
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* Plan nutrition IA */}
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Utensils size={15} color={USERS[uid].accent} />
+          <Label>Plan nutrition IA</Label>
+        </div>
+        <button onClick={generateNutrition} disabled={generatingNutrition} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: generatingNutrition ? S.bg : USERS[uid].accent, color: generatingNutrition ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: generatingNutrition ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {generatingNutrition ? <><Loader2 size={16} /> Génération en cours...</> : <><Utensils size={16} /> Générer mon plan nutrition 7 jours</>}
+        </button>
+        {aiNutrition && <>
+          <div style={{ marginTop: 14, background: S.bg, borderRadius: S.radiusSm, padding: '14px 16px', fontSize: 14, lineHeight: 1.75, color: S.text, whiteSpace: 'pre-wrap' }}>{aiNutrition}</div>
+          <button onClick={() => setAiNutrition(null)} style={{ marginTop: 8, width: '100%', padding: '10px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: 'transparent', color: S.textSec, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Effacer</button>
+        </>}
       </Card>
 
       <Card>
@@ -938,6 +1076,7 @@ function ProfilePage({ uid, sessions }) {
   const [newShoe, setNewShoe] = useState({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
   const [hrMax, setHrMax] = useLocalStorage(`hrMax_${uid}`, '')
   const [hrRest, setHrRest] = useLocalStorage(`hrRest_${uid}`, '')
+  const [vma, setVma] = useLocalStorage(`vma_${uid}`, '')
   const [weights, setWeights] = useLocalStorage(`weights_${uid}`, [])
   const [newWeight, setNewWeight] = useState('')
 
@@ -1317,6 +1456,39 @@ function ProfilePage({ uid, sessions }) {
         )}
       </Card>
 
+      {/* ── Zones d'allure course ── */}
+      <Card>
+        <Label>Zones d'allure course — VMA</Label>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>VMA (km/h)</div>
+          <input type="number" value={vma} onChange={e => setVma(e.target.value)} placeholder="ex: 14" style={inputStyle()} />
+          {vma && <div style={{ fontSize: 12, color: S.textSec, marginTop: 6 }}>Allure VMA : {(() => { const s = 3600 / +vma; return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` })()} /km</div>}
+        </div>
+        {vma ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { name: 'Z1 — Récupération', range: '55–65%', lo: 0.55, hi: 0.65, color: S.green },
+              { name: 'Z2 — Endurance',    range: '65–75%', lo: 0.65, hi: 0.75, color: '#007AFF' },
+              { name: 'Z3 — Tempo',        range: '75–85%', lo: 0.75, hi: 0.85, color: S.yellow },
+              { name: 'Z4 — Seuil',        range: '85–95%', lo: 0.85, hi: 0.95, color: ORANGE },
+              { name: 'Z5 — VMA',          range: '95–105%', lo: 0.95, hi: 1.05, color: S.red },
+            ].map(z => {
+              const toAllure = pct => { const s = 3600 / (+vma * pct); return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` }
+              return (
+                <div key={z.name} style={{ padding: '10px 14px', background: `${z.color}12`, borderRadius: S.radiusSm }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: z.color }}>{z.name} <span style={{ fontSize: 10, fontWeight: 400, color: S.textSec }}>{z.range}</span></div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: S.text }}>{toAllure(z.hi)} – {toAllure(z.lo)}<span style={{ fontSize: 10, fontWeight: 400, color: S.textSec }}> /km</span></div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', fontSize: 13, color: S.textSec }}>Entre ta VMA pour calculer tes allures cibles</div>
+        )}
+      </Card>
+
       {/* ── HR Zones ── */}
       <Card>
         <Label>Zones de fréquence cardiaque — Karvonen</Label>
@@ -1368,6 +1540,23 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
   const recent = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
+
+  // Score de forme = wellness (70%) + inverse de la charge semaine (30%)
+  const loadScore = Math.min(100, (totalMin / 300) * 100)
+  const formPct = wellScore !== null ? Math.round(wellScore * 0.70 + (100 - loadScore * 0.5) * 0.30) : null
+  const formRec = formPct === null ? null
+    : formPct >= 68 ? { txt: "🟢 Prêt à s'entraîner fort", c: S.green, bg: `${S.green}12` }
+    : formPct >= 45 ? { txt: '🟡 Entraînement modéré conseillé', c: S.yellow, bg: `${S.yellow}12` }
+    : { txt: '🔴 Repos recommandé aujourd\'hui', c: S.red, bg: `${S.red}12` }
+
+  // Alertes surcharge
+  const prevWsStart = new Date(ws); prevWsStart.setDate(prevWsStart.getDate() - 7)
+  const prevWeek = sessions.filter(s => s.user_id === uid && new Date(s.date) >= prevWsStart && new Date(s.date) < ws)
+  const prevMin = prevWeek.reduce((a, s) => a + (s.duration || 0), 0)
+  const volInc = prevMin > 20 ? Math.round((totalMin - prevMin) / prevMin * 100) : null
+  const volAlert = volInc !== null && volInc > 10
+  const last3 = [...sessions].filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
+  const rpeAlert = last3.length >= 3 && last3.every(s => (s.rpe || 0) > 7.5)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -1383,6 +1572,28 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
           </Card>
         ))}
       </div>
+      {formRec && (
+        <div style={{ padding: '13px 16px', borderRadius: S.radius, background: formRec.bg, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: formRec.c }}>{formRec.txt}</span>
+          <span style={{ fontSize: 12, color: formRec.c, fontWeight: 600 }}>{formPct}%</span>
+        </div>
+      )}
+      {(volAlert || rpeAlert) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {volAlert && (
+            <div style={{ padding: '12px 14px', borderRadius: S.radius, background: `${S.yellow}15`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertTriangle size={16} color={S.yellow} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: S.yellow }}>Volume en hausse de {volInc}% vs semaine dernière — pense à récupérer</span>
+            </div>
+          )}
+          {rpeAlert && (
+            <div style={{ padding: '12px 14px', borderRadius: S.radius, background: `${S.red}12`, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertTriangle size={16} color={S.red} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: S.red }}>3 séances consécutives à RPE élevé — récupération active conseillée</span>
+            </div>
+          )}
+        </div>
+      )}
       <WellnessForm uid={uid} wellness={wellness} onSave={onSave} />
       <Milestones uid={uid} sessions={sessions} />
       {recent.length > 0 && (
