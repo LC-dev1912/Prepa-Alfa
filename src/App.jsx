@@ -143,7 +143,7 @@ function WellnessForm({ uid, wellness, onSave }) {
   const [saving, setSaving] = useState(false)
   const score = Math.round(((vals.sleep + (6 - vals.fatigue) + vals.mood) / 15) * 100)
   const scoreColor = score >= 70 ? S.green : score >= 40 ? S.yellow : S.red
-  const emojis = [['😴','😞','😐','😊','🤩'],['🤩','😊','😐','😞','😴'],['😞','😐','😊','😄','🤩']]
+  const emojis = [['😴','😞','😐','😊','🤩'],['😴','😞','😐','😊','🤩'],['😞','😐','😊','😄','🤩']]
   const items = [{ key: 'sleep', label: 'Sommeil', display: vals.sleep, emKey: 0 }, { key: 'fatigue', label: 'Énergie', display: 6 - vals.fatigue, emKey: 1 }, { key: 'mood', label: 'Humeur', display: vals.mood, emKey: 2 }]
   const onChange = (key, v) => { setVals(p => ({ ...p, [key]: key === 'fatigue' ? 6 - v : v })); setSaved(false) }
   async function save() {
