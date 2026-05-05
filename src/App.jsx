@@ -1383,17 +1383,32 @@ function ProfilePage({ uid, sessions }) {
   // Chart data — last 12 weeks
   const weeklyChartData = (() => {
     const now = new Date()
-    return Array.from({ length: 12 }, (_, i) => {
-      const start = new Date(now)
-      start.setDate(now.getDate() - now.getDay() + 1 - (11 - i) * 7)
-      start.setHours(0, 0, 0, 0)
+    const toWeekStart = (date) => {
+      const d = new Date(date); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0, 0, 0, 0); return d
+    }
+    const currentWS = toWeekStart(now)
+    const realSessions = userSessions.filter(s => !isPlanned(s))
+    let weekStarts
+    if (!realSessions.length) {
+      weekStarts = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(currentWS); d.setDate(d.getDate() - (11 - i) * 7); return d
+      })
+    } else {
+      const earliest = realSessions.reduce((min, s) => s.date < min ? s.date : min, realSessions[0].date)
+      const s1 = toWeekStart(new Date(earliest))
+      weekStarts = []
+      const d = new Date(s1)
+      while (d <= currentWS) { weekStarts.push(new Date(d)); d.setDate(d.getDate() + 7) }
+    }
+    return weekStarts.map(start => {
       const end = new Date(start); end.setDate(start.getDate() + 7)
-      const ws = userSessions.filter(s => { const d = new Date(s.date); return d >= start && d < end })
+      const label = `${String(start.getDate()).padStart(2, '0')}/${String(start.getMonth() + 1).padStart(2, '0')}`
+      const ws = realSessions.filter(s => { const d = new Date(s.date); return d >= start && d < end })
       const byDisc = d => ws.filter(s => s.discipline === d)
       const natDist = s => s.distance_unit === 'm' ? +s.distance : +s.distance * 1000
       const allRpe = ws.filter(s => s.rpe).map(s => +s.rpe)
       return {
-        week: `S${i + 1}`,
+        week: label,
         Course: byDisc('Course à pied').reduce((a, s) => a + (s.duration || 0), 0),
         Vélo: byDisc('Vélo').reduce((a, s) => a + (s.duration || 0), 0),
         Natation: byDisc('Natation').reduce((a, s) => a + (s.duration || 0), 0),
