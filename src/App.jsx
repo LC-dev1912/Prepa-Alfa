@@ -62,7 +62,7 @@ async function askCoach(system, messages) {
 }
 
 const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
-const todayStr = () => new Date().toISOString().slice(0, 10)
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
 function buildSystem(uid, sessions, wellness) {
@@ -1106,7 +1106,7 @@ function PlanPage({ uid, sessions, wellness, setSessions }) {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(ws); d.setDate(ws.getDate() + offsetWeeks * 7 + i)
-      const dateStr = d.toISOString().slice(0, 10)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       return { date: dateStr, name: names[i], num: d.getDate(), isToday: d.getTime() === today.getTime(), isPast: d < today, sessions: sessions.filter(s => s.user_id === uid && s.date === dateStr) }
     })
   }
