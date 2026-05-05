@@ -66,13 +66,17 @@ const todayStr = () => new Date().toISOString().slice(0, 10)
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
 function buildSystem(uid, sessions, wellness) {
-  const s = sessions.filter(x => x.user_id === uid).slice(-20)
+  const all = sessions.filter(x => x.user_id === uid).slice(-20)
+  const past = all.filter(x => !isPlanned(x) && x.date <= todayStr())
+  const planned = all.filter(x => isPlanned(x) || x.date > todayStr())
   const w = wellness.filter(x => x.user_id === uid).slice(-7)
   return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
 PROFIL : ${USERS[uid].profile}
 OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026. Jour J-${daysLeft()}.
-SÉANCES RÉCENTES :
-${s.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${x.notes ? ` | ${x.notes}` : ''}`).join('\n') || 'Aucune séance.'}
+SÉANCES RÉELLES (passées) :
+${past.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${x.notes ? ` | ${x.notes}` : ''}`).join('\n') || 'Aucune séance réelle.'}
+SÉANCES PLANIFIÉES (futures) :
+${planned.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [Planifiée — pas encore réalisée]`).join('\n') || 'Aucune séance planifiée.'}
 BIEN-ÊTRE :
 ${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Fatigue ${x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
 Réponds en français, direct, bienveillant et concret.`
@@ -85,6 +89,11 @@ const S = {
 }
 
 const discColor = (disc) => ({ Natation: '#007AFF', Vélo: '#FF9500', 'Course à pied': ORANGE, Musculation: '#AF52DE', Brick: '#FF3B30', Récupération: S.green })[disc] || S.textSec
+
+const isPlanned = (session) => {
+  if (!session?.notes) return false
+  try { return JSON.parse(session.notes)?.planned === true } catch { return false }
+}
 
 const Card = ({ children, style, onClick }) => (
   <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '16px 18px', ...style, cursor: onClick ? 'pointer' : 'default' }}>{children}</div>
@@ -149,7 +158,12 @@ function WellnessForm({ uid, wellness, onSave }) {
   const onChange = (key, v) => { setVals(p => ({ ...p, [key]: key === 'fatigue' ? 6 - v : v })); setSaved(false) }
   async function save() {
     setSaving(true)
-    await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
+    const { error } = await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
+    if (error) {
+      console.error('Wellness save error:', error)
+      setSaving(false)
+      return
+    }
     await onSave(); setSaved(true); setSaving(false)
   }
   return (
@@ -229,7 +243,8 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   }, [timerRunning])
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   const disc = f.discipline
-  const last = sessions.filter(s => s.user_id === uid && s.discipline === disc).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+  const isFuture = f.date > todayStr()
+  const last = sessions.filter(s => s.user_id === uid && s.discipline === disc && !isPlanned(s)).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
   const delta = last && f.distance && last.distance ? ((+f.distance - +last.distance) / +last.distance * 100).toFixed(1) : null
 
   const autoPace = (() => {
@@ -288,6 +303,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       extra.brickTransitions = f.brickTransitions.slice(0, legs.length - 1)
     }
     if (f.notes) extra.userNotes = f.notes
+    if (isFuture) extra.planned = true
 
     // Compute duration (Brick = sum of legs + transitions)
     let duration = +f.duration
@@ -308,7 +324,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       pace: f.pace || null,
       hr_avg: f.hr_avg ? +f.hr_avg : null,
       hr_max: f.hr_max ? +f.hr_max : null,
-      rpe: +f.rpe,
+      rpe: isFuture ? null : +f.rpe,
       conditions: f.conditions || null,
       notes: Object.keys(extra).length ? JSON.stringify(extra) : null,
     }
@@ -407,14 +423,16 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
             <div><Label>FC Max (bpm)</Label><input type="number" value={f.hr_max} placeholder="172" onChange={e => set('hr_max', e.target.value)} style={inputStyle()} /></div>
           </>}
 
-          <div style={{ gridColumn: '1/-1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-              <Label>Effort perçu (RPE)</Label>
-              <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{f.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
+          {!isFuture && (
+            <div style={{ gridColumn: '1/-1' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Label>Effort perçu (RPE)</Label>
+                <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{f.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
+              </div>
+              <input type="range" min="1" max="10" value={f.rpe} onChange={e => set('rpe', e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
             </div>
-            <input type="range" min="1" max="10" value={f.rpe} onChange={e => set('rpe', e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
-          </div>
+          )}
 
           <div style={{ gridColumn: '1/-1' }}>
             <Label>Notes</Label>
@@ -494,8 +512,13 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
           </div>
         </div>
       )}
+      {isFuture && (
+        <div style={{ padding: '10px 14px', background: `${S.yellow}15`, borderRadius: S.radiusSm, fontSize: 13, color: S.yellow, fontWeight: 600, textAlign: 'center' }}>
+          Séance future — sera marquée comme "Planifiée"
+        </div>
+      )}
       <button onClick={submit} disabled={saving || !f.duration} style={{ width: '100%', padding: '16px', borderRadius: S.radiusSm, border: 'none', background: saving || !f.duration ? S.bg : USERS[uid].accent, color: saving || !f.duration ? S.textSec : '#fff', fontSize: 16, fontWeight: 700, cursor: saving || !f.duration ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-        {saving ? 'Enregistrement...' : 'Enregistrer la séance'}
+        {saving ? 'Enregistrement...' : isFuture ? 'Planifier la séance' : 'Enregistrer la séance'}
       </button>
     </div>
   )
@@ -528,6 +551,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
   }
   if (!session) return null
   const color = discColor(session.discipline)
+  const planned = isPlanned(session)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: `1px solid ${S.border}` }}>
@@ -536,14 +560,17 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
         </div>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: S.text }}>{session.discipline}</div>
-          <div style={{ fontSize: 13, color: S.textSec }}>{session.date}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: S.textSec }}>{session.date}</div>
+            {planned && <div style={{ fontSize: 10, fontWeight: 700, color: S.yellow, background: `${S.yellow}20`, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase' }}>Planifiée</div>}
+          </div>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
         {[
           { label: 'Durée', val: `${session.duration}min` },
           { label: 'Distance', val: session.distance ? `${session.distance}${session.distance_unit}` : '—' },
-          { label: 'RPE', val: `${session.rpe}/10`, color },
+          { label: 'RPE', val: session.rpe != null ? `${session.rpe}/10` : '—', color: session.rpe != null ? color : S.textSec },
           session.vitesse ? { label: 'Vitesse', val: `${session.vitesse}km/h` } : null,
           session.pace ? { label: 'Allure', val: session.pace } : null,
           session.hr_avg ? { label: 'FC moy', val: `${session.hr_avg}bpm` } : null,
@@ -554,16 +581,22 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
           </div>
         ))}
       </div>
-      {session.notes && <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 14px' }}><div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>NOTES</div><div style={{ fontSize: 14, color: S.text, lineHeight: 1.5 }}>{session.notes}</div></div>}
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Bot size={18} color={USERS[uid].accent} /> Analyse du coach</div>
-        {loadingAnalysis ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: S.textSec, fontSize: 14 }}><Loader2 size={16} /> Analyse en cours...</div>
-        ) : (
-          <div style={{ background: `${USERS[uid].accent}08`, border: `1px solid ${USERS[uid].accent}22`, borderRadius: S.radiusSm, padding: '14px 16px', fontSize: 14, lineHeight: 1.7, color: S.text, whiteSpace: 'pre-wrap' }}>{analysis}</div>
-        )}
-      </div>
-      {!loadingAnalysis && (
+      {session.notes && (() => { try { const p = JSON.parse(session.notes); const { planned: _, ...rest } = p; const txt = rest.userNotes || (Object.keys(rest).length ? JSON.stringify(rest) : null); return txt ? <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 14px' }}><div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>NOTES</div><div style={{ fontSize: 14, color: S.text, lineHeight: 1.5 }}>{txt}</div></div> : null } catch { return <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 14px' }}><div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, marginBottom: 6 }}>NOTES</div><div style={{ fontSize: 14, color: S.text, lineHeight: 1.5 }}>{session.notes}</div></div> } })()}
+      {planned ? (
+        <div style={{ background: `${S.yellow}10`, border: `1px solid ${S.yellow}33`, borderRadius: S.radiusSm, padding: '14px 16px', fontSize: 14, color: S.text }}>
+          Cette séance est planifiée et n'a pas encore été réalisée. Complète-la après l'entraînement pour obtenir une analyse du coach.
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Bot size={18} color={USERS[uid].accent} /> Analyse du coach</div>
+          {loadingAnalysis ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: S.textSec, fontSize: 14 }}><Loader2 size={16} /> Analyse en cours...</div>
+          ) : (
+            <div style={{ background: `${USERS[uid].accent}08`, border: `1px solid ${USERS[uid].accent}22`, borderRadius: S.radiusSm, padding: '14px 16px', fontSize: 14, lineHeight: 1.7, color: S.text, whiteSpace: 'pre-wrap' }}>{analysis}</div>
+          )}
+        </div>
+      )}
+      {!planned && !loadingAnalysis && (
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><MessageSquare size={18} color={USERS[uid].accent} /> Discuter de cette séance</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, maxHeight: 250, overflowY: 'auto' }}>
@@ -586,11 +619,34 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
 function HistoryPage({ uid, sessions, wellness, setSessions }) {
   const [filter, setFilter] = useState('Toutes')
   const [selected, setSelected] = useState(null)
+  const [toComplete, setToComplete] = useState(null)
+  const [completeForm, setCompleteForm] = useState({ rpe: '7', distance: '', notes: '' })
+  const [completing, setCompleting] = useState(false)
+  const today = todayStr()
   const list = sessions.filter(s => s.user_id === uid && (filter === 'Toutes' || s.discipline === filter)).sort((a, b) => new Date(b.date) - new Date(a.date))
   const deleteSession = async (id) => {
     if (!window.confirm('Supprimer cette séance ?')) return
     await supabase.from('sessions').delete().eq('id', id)
     setSessions(prev => prev.filter(s => s.id !== id)); setSelected(null)
+  }
+  async function submitComplete() {
+    if (!toComplete) return
+    setCompleting(true)
+    let extra = {}
+    try { extra = JSON.parse(toComplete.notes || '{}') } catch {}
+    delete extra.planned
+    if (completeForm.notes) extra.userNotes = completeForm.notes
+    const updates = {
+      rpe: +completeForm.rpe,
+      notes: Object.keys(extra).length ? JSON.stringify(extra) : null,
+    }
+    if (completeForm.distance) updates.distance = +completeForm.distance
+    const { error } = await supabase.from('sessions').update(updates).eq('id', toComplete.id)
+    if (error) { console.error('Complete session error:', error); setCompleting(false); return }
+    setSessions(prev => prev.map(s => s.id === toComplete.id ? { ...s, ...updates } : s))
+    setToComplete(null)
+    setCompleteForm({ rpe: '7', distance: '', notes: '' })
+    setCompleting(false)
   }
   return (
     <div>
@@ -604,18 +660,31 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
           <div style={{ textAlign: 'center', padding: '30px 0', color: S.textSec }}><div style={{ fontSize: 14 }}>Aucune séance</div></div>
         ) : list.map((s, i) => {
           const color = discColor(s.discipline)
+          const planned = isPlanned(s)
+          const isPastPlanned = planned && s.date < today
           return (
-            <div key={s.id} onClick={() => setSelected(s)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < list.length - 1 ? `1px solid ${S.border}` : 'none', cursor: 'pointer' }}>
-              <div style={{ width: 46, height: 46, background: `${color}18`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><DiscIcon disc={s.discipline} size={22} color={color} /></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>{s.discipline}</div>
-                <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < list.length - 1 ? `1px solid ${S.border}` : 'none' }}>
+              <div onClick={() => setSelected(s)} style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, cursor: 'pointer', minWidth: 0 }}>
+                <div style={{ width: 46, height: 46, background: planned ? 'transparent' : `${color}18`, border: planned ? `2px dashed ${color}` : 'none', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <DiscIcon disc={s.discipline} size={22} color={color} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>{s.discipline}</div>
+                    {planned && <div style={{ fontSize: 9, fontWeight: 700, color: isPastPlanned ? S.red : S.yellow, background: isPastPlanned ? `${S.red}18` : `${S.yellow}20`, padding: '2px 6px', borderRadius: 99, textTransform: 'uppercase', flexShrink: 0 }}>{isPastPlanned ? 'À compléter' : 'Planifiée'}</div>}
+                  </div>
+                  <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
+                </div>
+                <div style={{ textAlign: 'right', marginRight: 4, flexShrink: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
+                  {!planned && <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>}
+                </div>
               </div>
-              <div style={{ textAlign: 'right', marginRight: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
-                <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>
-              </div>
-              <ChevronRight size={16} color={S.textTer} />
+              {isPastPlanned ? (
+                <button onClick={() => { setToComplete(s); setCompleteForm({ rpe: '7', distance: s.distance ? String(s.distance) : '', notes: '' }) }} style={{ padding: '7px 12px', borderRadius: 99, border: 'none', background: USERS[uid].accent, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Compléter</button>
+              ) : (
+                <ChevronRight size={16} color={S.textTer} />
+              )}
             </div>
           )
         })}
@@ -625,6 +694,34 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
           <SessionDetail session={selected} uid={uid} sessions={sessions} wellness={wellness} />
           <button onClick={() => deleteSession(selected.id)} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: S.radiusSm, border: `1px solid ${S.red}`, background: 'transparent', color: S.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
         </>}
+      </Sheet>
+      <Sheet open={!!toComplete} onClose={() => setToComplete(null)} title="Compléter la séance">
+        {toComplete && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 20 }}>
+            <div style={{ padding: '10px 14px', background: `${USERS[uid].accent}10`, borderRadius: S.radiusSm, fontSize: 13, color: S.text }}>
+              <strong>{toComplete.discipline}</strong> — {toComplete.date} — {toComplete.duration}min
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Label>Effort perçu (RPE)</Label>
+                <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{completeForm.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
+              </div>
+              <input type="range" min="1" max="10" value={completeForm.rpe} onChange={e => setCompleteForm(p => ({ ...p, rpe: e.target.value }))} style={{ width: '100%', accentColor: USERS[uid].accent }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
+            </div>
+            <div>
+              <Label>Distance réelle {toComplete.distance_unit === 'm' ? '(m)' : '(km)'}</Label>
+              <input type="number" value={completeForm.distance} onChange={e => setCompleteForm(p => ({ ...p, distance: e.target.value }))} placeholder={toComplete.distance ? String(toComplete.distance) : 'Distance'} style={inputStyle()} />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <textarea value={completeForm.notes} onChange={e => setCompleteForm(p => ({ ...p, notes: e.target.value }))} placeholder="Ressenti, observations..." rows={3} style={{ ...inputStyle(), resize: 'vertical' }} />
+            </div>
+            <button onClick={submitComplete} disabled={completing} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: completing ? S.bg : USERS[uid].accent, color: completing ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: completing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+              {completing ? 'Enregistrement...' : 'Valider la séance'}
+            </button>
+          </div>
+        )}
       </Sheet>
     </div>
   )
@@ -976,12 +1073,18 @@ function PlanPage({ uid, sessions, wellness }) {
               <div style={{ fontSize: 15, fontWeight: day.isToday ? 800 : 500, color: day.isToday ? USERS[uid].accent : S.text, marginBottom: 5 }}>{day.num}</div>
               {day.sessions.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  {day.sessions.slice(0, 2).map((s, i) => (
-                    <div key={i} style={{ width: 22, height: 22, borderRadius: 7, background: `${discColor(s.discipline)}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <DiscIcon disc={s.discipline} size={11} color={discColor(s.discipline)} />
-                    </div>
-                  ))}
-                  <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.reduce((a, s) => a + (s.duration || 0), 0)}m</div>
+                  {day.sessions.slice(0, 2).map((s, i) => {
+                    const sp = isPlanned(s)
+                    return (
+                      <div key={i} style={{ width: 22, height: 22, borderRadius: 7, background: sp ? 'transparent' : `${discColor(s.discipline)}22`, border: sp ? `1.5px dashed ${discColor(s.discipline)}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <DiscIcon disc={s.discipline} size={11} color={discColor(s.discipline)} />
+                      </div>
+                    )
+                  })}
+                  {day.sessions.every(s => isPlanned(s))
+                    ? <div style={{ fontSize: 7, color: S.yellow, fontWeight: 700 }}>Planifié</div>
+                    : <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.filter(s => !isPlanned(s)).reduce((a, s) => a + (s.duration || 0), 0)}m</div>
+                  }
                 </div>
               ) : (
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: day.isPast ? S.border : `${S.textTer}40` }} />
