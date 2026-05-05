@@ -1013,17 +1013,19 @@ function PlanPage({ uid, sessions, wellness }) {
   const [generating, setGenerating] = useState(false)
   const [generatingNutrition, setGeneratingNutrition] = useState(false)
 
-  // Calendrier semaine
-  const weekDays = (() => {
+  // Calendrier 2 semaines
+  const buildWeekDays = (offsetWeeks) => {
     const ws = weekStart()
     const names = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(ws); d.setDate(ws.getDate() + i)
+      const d = new Date(ws); d.setDate(ws.getDate() + offsetWeeks * 7 + i)
       const dateStr = d.toISOString().slice(0, 10)
       return { date: dateStr, name: names[i], num: d.getDate(), isToday: d.getTime() === today.getTime(), isPast: d < today, sessions: sessions.filter(s => s.user_id === uid && s.date === dateStr) }
     })
-  })()
+  }
+  const thisWeekDays = buildWeekDays(0)
+  const nextWeekDays = buildWeekDays(1)
 
   // Simulateur de course
   const simTotal = (+simTarget.h * 3600) + (+simTarget.m * 60)
@@ -1069,34 +1071,65 @@ function PlanPage({ uid, sessions, wellness }) {
         <div style={{ fontSize: 13, color: '#8E8E93', marginTop: 4 }}>750m · 20km · 5km</div>
       </Card>
 
-      {/* Calendrier semaine */}
+      {/* Calendrier 2 semaines */}
       <Card>
-        <Label>Calendrier de la semaine</Label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-          {weekDays.map(day => (
-            <div key={day.date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', borderRadius: S.radiusSm, background: day.isToday ? `${USERS[uid].accent}15` : 'transparent', border: `1.5px solid ${day.isToday ? USERS[uid].accent + '55' : 'transparent'}` }}>
-              <div style={{ fontSize: 9, color: S.textSec, fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{day.name}</div>
-              <div style={{ fontSize: 15, fontWeight: day.isToday ? 800 : 500, color: day.isToday ? USERS[uid].accent : S.text, marginBottom: 5 }}>{day.num}</div>
-              {day.sessions.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  {day.sessions.slice(0, 2).map((s, i) => {
-                    const sp = isPlanned(s)
-                    return (
-                      <div key={i} style={{ width: 22, height: 22, borderRadius: 7, background: sp ? 'transparent' : `${discColor(s.discipline)}22`, border: sp ? `1.5px dashed ${discColor(s.discipline)}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <DiscIcon disc={s.discipline} size={11} color={discColor(s.discipline)} />
-                      </div>
-                    )
-                  })}
-                  {day.sessions.every(s => isPlanned(s))
-                    ? <div style={{ fontSize: 7, color: S.yellow, fontWeight: 700 }}>Planifié</div>
-                    : <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.filter(s => !isPlanned(s)).reduce((a, s) => a + (s.duration || 0), 0)}m</div>
-                  }
-                </div>
-              ) : (
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: day.isPast ? S.border : `${S.textTer}40` }} />
-              )}
+        <Label>Calendrier</Label>
+        {[{ label: 'Cette semaine', days: thisWeekDays }, { label: 'Semaine prochaine', days: nextWeekDays }].map(({ label, days }) => (
+          <div key={label} style={{ marginBottom: label === 'Cette semaine' ? 16 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: S.text }}>{label}</div>
+              <div style={{ flex: 1, height: 1, background: S.border }} />
+              <div style={{ fontSize: 11, color: S.textSec }}>
+                {days.filter(d => d.sessions.some(s => !isPlanned(s))).length > 0 && (
+                  <span style={{ color: S.green, fontWeight: 600 }}>
+                    {days.filter(d => d.sessions.some(s => !isPlanned(s))).length} séance{days.filter(d => d.sessions.some(s => !isPlanned(s))).length > 1 ? 's' : ''}
+                  </span>
+                )}
+                {days.filter(d => d.sessions.some(s => isPlanned(s))).length > 0 && (
+                  <span style={{ color: S.yellow, fontWeight: 600, marginLeft: 6 }}>
+                    {days.filter(d => d.sessions.some(s => isPlanned(s))).length} planifiée{days.filter(d => d.sessions.some(s => isPlanned(s))).length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
             </div>
-          ))}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {days.map(day => {
+                const hasReal = day.sessions.some(s => !isPlanned(s))
+                const hasPlanned = day.sessions.some(s => isPlanned(s))
+                const dotBg = day.sessions.length === 0
+                  ? (day.isPast ? S.border : `${S.textTer}40`)
+                  : null
+                return (
+                  <div key={day.date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', borderRadius: S.radiusSm, background: day.isToday ? `${USERS[uid].accent}15` : 'transparent', border: `1.5px solid ${day.isToday ? USERS[uid].accent + '55' : 'transparent'}` }}>
+                    <div style={{ fontSize: 9, color: S.textSec, fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{day.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: day.isToday ? 800 : 500, color: day.isToday ? USERS[uid].accent : S.text, marginBottom: 5 }}>{day.num}</div>
+                    {day.sessions.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        {day.sessions.slice(0, 2).map((s, i) => {
+                          const sp = isPlanned(s)
+                          return (
+                            <div key={i} style={{ width: 22, height: 22, borderRadius: 7, background: sp ? 'transparent' : `${discColor(s.discipline)}22`, border: sp ? `1.5px dashed ${discColor(s.discipline)}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <DiscIcon disc={s.discipline} size={11} color={discColor(s.discipline)} />
+                            </div>
+                          )
+                        })}
+                        {hasReal && !hasPlanned && <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.filter(s => !isPlanned(s)).reduce((a, s) => a + (s.duration || 0), 0)}m</div>}
+                        {hasPlanned && !hasReal && <div style={{ fontSize: 7, color: S.yellow, fontWeight: 700 }}>Planifié</div>}
+                        {hasReal && hasPlanned && <div style={{ fontSize: 7, color: S.green, fontWeight: 700 }}>+plan</div>}
+                      </div>
+                    ) : (
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotBg }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 14, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: S.textSec }}><div style={{ width: 10, height: 10, borderRadius: 3, background: `${S.green}40` }} />Séance faite</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: S.textSec }}><div style={{ width: 10, height: 10, borderRadius: 3, border: `1.5px dashed ${S.yellow}` }} />Planifiée</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: S.textSec }}><div style={{ width: 10, height: 10, borderRadius: '50%', background: S.border }} />Repos</div>
         </div>
       </Card>
 
