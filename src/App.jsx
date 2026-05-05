@@ -622,12 +622,124 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
   )
 }
 
+function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
+  const [showComplete, setShowComplete] = useState(false)
+  const [form, setForm] = useState({ rpe: '7', distance: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (session) setForm({ rpe: '7', distance: session.distance ? String(session.distance) : '', notes: '' })
+    setShowComplete(false)
+  }, [session?.id])
+
+  if (!session) return null
+
+  let extra = {}
+  try { extra = JSON.parse(session.notes || '{}') } catch {}
+  const color = discColor(session.discipline)
+  const descParts = [
+    extra.nageType, extra.veloType, extra.capType, extra.muscuFocus,
+    extra.vitesse ? `${extra.vitesse} km/h` : null,
+    extra.denivele ? `D+ ${extra.denivele}m` : null,
+  ].filter(Boolean)
+
+  async function complete() {
+    setSaving(true)
+    const updated = { ...extra }
+    delete updated.planned
+    if (form.notes) updated.userNotes = form.notes
+    const updates = { rpe: +form.rpe, notes: Object.keys(updated).length ? JSON.stringify(updated) : null }
+    if (form.distance) updates.distance = +form.distance
+    const { error } = await supabase.from('sessions').update(updates).eq('id', session.id)
+    if (error) { console.error('Complete session error:', error); setSaving(false); return }
+    onDone(session.id, updates)
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Séance planifiée">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 52, height: 52, background: 'transparent', border: `2px dashed ${color}`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <DiscIcon disc={session.discipline} size={26} color={color} />
+          </div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: S.text }}>{session.discipline}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+              <div style={{ fontSize: 13, color: S.textSec }}>{session.date}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: S.yellow, background: `${S.yellow}20`, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase' }}>Planifiée</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: session.distance ? '1fr 1fr' : '1fr', gap: 10 }}>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: S.text }}>{session.duration}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>min</span></div>
+            <div style={{ fontSize: 10, color: S.textSec, marginTop: 3 }}>Durée prévue</div>
+          </div>
+          {session.distance && (
+            <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: S.text }}>{session.distance}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>{session.distance_unit}</span></div>
+              <div style={{ fontSize: 10, color: S.textSec, marginTop: 3 }}>Distance cible</div>
+            </div>
+          )}
+        </div>
+
+        {descParts.length > 0 && (
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, color: S.textSec, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>Description</div>
+            <div style={{ fontSize: 14, color: S.text }}>{descParts.join(' · ')}</div>
+          </div>
+        )}
+
+        {(extra.userNotes || extra.note) && (
+          <div style={{ background: `${USERS[uid].accent}08`, border: `1px solid ${USERS[uid].accent}22`, borderRadius: S.radiusSm, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, color: USERS[uid].accent, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6 }}>Note</div>
+            <div style={{ fontSize: 14, color: S.text, lineHeight: 1.6 }}>{extra.userNotes || extra.note}</div>
+          </div>
+        )}
+
+        {!showComplete ? (
+          <button onClick={() => setShowComplete(true)} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: USERS[uid].accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Marquer comme effectuée
+          </button>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px', background: S.bg, borderRadius: S.radiusSm }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>Compléter la séance</div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Label>Effort perçu (RPE)</Label>
+                <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{form.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
+              </div>
+              <input type="range" min="1" max="10" value={form.rpe} onChange={e => setForm(p => ({ ...p, rpe: e.target.value }))} style={{ width: '100%', accentColor: USERS[uid].accent }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
+            </div>
+            <div>
+              <Label>Distance réelle {session.distance_unit === 'm' ? '(m)' : '(km)'}</Label>
+              <input type="number" value={form.distance} onChange={e => setForm(p => ({ ...p, distance: e.target.value }))} placeholder={session.distance ? String(session.distance) : 'Distance'} style={inputStyle()} />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Ressenti, observations..." rows={3} style={{ ...inputStyle(), resize: 'vertical' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowComplete(false)} style={{ flex: 1, padding: '12px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: 'transparent', color: S.textSec, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+              <button onClick={complete} disabled={saving} style={{ flex: 2, padding: '12px', borderRadius: S.radiusSm, border: 'none', background: saving ? S.bg : USERS[uid].accent, color: saving ? S.textSec : '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                {saving ? 'Enregistrement...' : 'Valider'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Sheet>
+  )
+}
+
 function HistoryPage({ uid, sessions, wellness, setSessions }) {
   const [filter, setFilter] = useState('Toutes')
   const [selected, setSelected] = useState(null)
-  const [toComplete, setToComplete] = useState(null)
-  const [completeForm, setCompleteForm] = useState({ rpe: '7', distance: '', notes: '' })
-  const [completing, setCompleting] = useState(false)
+  const [plannedSelected, setPlannedSelected] = useState(null)
   const today = todayStr()
   const list = sessions.filter(s => s.user_id === uid && (filter === 'Toutes' || s.discipline === filter)).sort((a, b) => new Date(b.date) - new Date(a.date))
   const deleteSession = async (id) => {
@@ -635,25 +747,7 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
     await supabase.from('sessions').delete().eq('id', id)
     setSessions(prev => prev.filter(s => s.id !== id)); setSelected(null)
   }
-  async function submitComplete() {
-    if (!toComplete) return
-    setCompleting(true)
-    let extra = {}
-    try { extra = JSON.parse(toComplete.notes || '{}') } catch {}
-    delete extra.planned
-    if (completeForm.notes) extra.userNotes = completeForm.notes
-    const updates = {
-      rpe: +completeForm.rpe,
-      notes: Object.keys(extra).length ? JSON.stringify(extra) : null,
-    }
-    if (completeForm.distance) updates.distance = +completeForm.distance
-    const { error } = await supabase.from('sessions').update(updates).eq('id', toComplete.id)
-    if (error) { console.error('Complete session error:', error); setCompleting(false); return }
-    setSessions(prev => prev.map(s => s.id === toComplete.id ? { ...s, ...updates } : s))
-    setToComplete(null)
-    setCompleteForm({ rpe: '7', distance: '', notes: '' })
-    setCompleting(false)
-  }
+  const handleDone = (id, updates) => setSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 16 }}>
@@ -669,28 +763,22 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
           const planned = isPlanned(s)
           const isPastPlanned = planned && s.date < today
           return (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < list.length - 1 ? `1px solid ${S.border}` : 'none' }}>
-              <div onClick={() => setSelected(s)} style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, cursor: 'pointer', minWidth: 0 }}>
-                <div style={{ width: 46, height: 46, background: planned ? 'transparent' : `${color}18`, border: planned ? `2px dashed ${color}` : 'none', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <DiscIcon disc={s.discipline} size={22} color={color} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>{s.discipline}</div>
-                    {planned && <div style={{ fontSize: 9, fontWeight: 700, color: isPastPlanned ? S.red : S.yellow, background: isPastPlanned ? `${S.red}18` : `${S.yellow}20`, padding: '2px 6px', borderRadius: 99, textTransform: 'uppercase', flexShrink: 0 }}>{isPastPlanned ? 'À compléter' : 'Planifiée'}</div>}
-                  </div>
-                  <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
-                </div>
-                <div style={{ textAlign: 'right', marginRight: 4, flexShrink: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
-                  {!planned && <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>}
-                </div>
+            <div key={s.id} onClick={() => planned ? setPlannedSelected(s) : setSelected(s)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < list.length - 1 ? `1px solid ${S.border}` : 'none', cursor: 'pointer' }}>
+              <div style={{ width: 46, height: 46, background: planned ? 'transparent' : `${color}18`, border: planned ? `2px dashed ${color}` : 'none', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <DiscIcon disc={s.discipline} size={22} color={color} />
               </div>
-              {isPastPlanned ? (
-                <button onClick={() => { setToComplete(s); setCompleteForm({ rpe: '7', distance: s.distance ? String(s.distance) : '', notes: '' }) }} style={{ padding: '7px 12px', borderRadius: 99, border: 'none', background: USERS[uid].accent, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Compléter</button>
-              ) : (
-                <ChevronRight size={16} color={S.textTer} />
-              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>{s.discipline}</div>
+                  {planned && <div style={{ fontSize: 9, fontWeight: 700, color: isPastPlanned ? S.red : S.yellow, background: isPastPlanned ? `${S.red}18` : `${S.yellow}20`, padding: '2px 6px', borderRadius: 99, textTransform: 'uppercase', flexShrink: 0 }}>{isPastPlanned ? 'À compléter' : 'Planifiée'}</div>}
+                </div>
+                <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
+                {!planned && <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>}
+              </div>
+              <ChevronRight size={16} color={S.textTer} />
             </div>
           )
         })}
@@ -701,34 +789,7 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
           <button onClick={() => deleteSession(selected.id)} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: S.radiusSm, border: `1px solid ${S.red}`, background: 'transparent', color: S.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
         </>}
       </Sheet>
-      <Sheet open={!!toComplete} onClose={() => setToComplete(null)} title="Compléter la séance">
-        {toComplete && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 20 }}>
-            <div style={{ padding: '10px 14px', background: `${USERS[uid].accent}10`, borderRadius: S.radiusSm, fontSize: 13, color: S.text }}>
-              <strong>{toComplete.discipline}</strong> — {toComplete.date} — {toComplete.duration}min
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <Label>Effort perçu (RPE)</Label>
-                <span style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent }}>{completeForm.rpe}<span style={{ fontSize: 11, color: S.textSec, fontWeight: 400 }}>/10</span></span>
-              </div>
-              <input type="range" min="1" max="10" value={completeForm.rpe} onChange={e => setCompleteForm(p => ({ ...p, rpe: e.target.value }))} style={{ width: '100%', accentColor: USERS[uid].accent }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: S.textTer, marginTop: 4 }}><span>Facile</span><span>Modéré</span><span>Maximum</span></div>
-            </div>
-            <div>
-              <Label>Distance réelle {toComplete.distance_unit === 'm' ? '(m)' : '(km)'}</Label>
-              <input type="number" value={completeForm.distance} onChange={e => setCompleteForm(p => ({ ...p, distance: e.target.value }))} placeholder={toComplete.distance ? String(toComplete.distance) : 'Distance'} style={inputStyle()} />
-            </div>
-            <div>
-              <Label>Notes</Label>
-              <textarea value={completeForm.notes} onChange={e => setCompleteForm(p => ({ ...p, notes: e.target.value }))} placeholder="Ressenti, observations..." rows={3} style={{ ...inputStyle(), resize: 'vertical' }} />
-            </div>
-            <button onClick={submitComplete} disabled={completing} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: completing ? S.bg : USERS[uid].accent, color: completing ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: completing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-              {completing ? 'Enregistrement...' : 'Valider la séance'}
-            </button>
-          </div>
-        )}
-      </Sheet>
+      <PlannedSessionSheet session={plannedSelected} uid={uid} onDone={handleDone} open={!!plannedSelected} onClose={() => setPlannedSelected(null)} />
     </div>
   )
 }
@@ -1006,12 +1067,13 @@ const PLAN = {
   ],
 }
 
-function PlanPage({ uid, sessions, wellness }) {
+function PlanPage({ uid, sessions, wellness, setSessions }) {
   const [aiPlan, setAiPlan] = useLocalStorage(`aiPlan_${uid}`, null)
   const [aiNutrition, setAiNutrition] = useLocalStorage(`aiNutrition_${uid}`, null)
   const [simTarget, setSimTarget] = useLocalStorage(`simTarget_${uid}`, { h: '1', m: '30' })
   const [generating, setGenerating] = useState(false)
   const [generatingNutrition, setGeneratingNutrition] = useState(false)
+  const [plannedSelected, setPlannedSelected] = useState(null)
 
   // Calendrier 2 semaines
   const buildWeekDays = (offsetWeeks) => {
@@ -1096,11 +1158,12 @@ function PlanPage({ uid, sessions, wellness }) {
               {days.map(day => {
                 const hasReal = day.sessions.some(s => !isPlanned(s))
                 const hasPlanned = day.sessions.some(s => isPlanned(s))
+                const firstPlanned = day.sessions.find(s => isPlanned(s))
                 const dotBg = day.sessions.length === 0
                   ? (day.isPast ? S.border : `${S.textTer}40`)
                   : null
                 return (
-                  <div key={day.date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', borderRadius: S.radiusSm, background: day.isToday ? `${USERS[uid].accent}15` : 'transparent', border: `1.5px solid ${day.isToday ? USERS[uid].accent + '55' : 'transparent'}` }}>
+                  <div key={day.date} onClick={() => firstPlanned && setPlannedSelected(firstPlanned)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', borderRadius: S.radiusSm, background: day.isToday ? `${USERS[uid].accent}15` : 'transparent', border: `1.5px solid ${day.isToday ? USERS[uid].accent + '55' : 'transparent'}`, cursor: firstPlanned ? 'pointer' : 'default' }}>
                     <div style={{ fontSize: 9, color: S.textSec, fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{day.name}</div>
                     <div style={{ fontSize: 15, fontWeight: day.isToday ? 800 : 500, color: day.isToday ? USERS[uid].accent : S.text, marginBottom: 5 }}>{day.num}</div>
                     {day.sessions.length > 0 ? (
@@ -1208,6 +1271,7 @@ function PlanPage({ uid, sessions, wellness }) {
           <button onClick={() => setAiPlan(null)} style={{ marginTop: 8, width: '100%', padding: '10px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: 'transparent', color: S.textSec, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Effacer le plan</button>
         )}
       </Card>
+      <PlannedSessionSheet session={plannedSelected} uid={uid} onDone={(id, updates) => setSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))} open={!!plannedSelected} onClose={() => setPlannedSelected(null)} />
     </div>
   )
 }
@@ -1842,7 +1906,7 @@ export default function App() {
             {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
             {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} />}
             {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
-            {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} />}
+            {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
             {tab === 'duel' && <DuelPage sessions={sessions} />}
             {tab === 'profil' && <ProfilePage key={uid} uid={uid} sessions={sessions} />}
           </>
