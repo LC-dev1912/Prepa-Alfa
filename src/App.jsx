@@ -795,16 +795,40 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
 }
 
 function DuelPage({ sessions }) {
-  const getWeeks = (uid, disc) => {
-    const result = []; const now = new Date()
-    for (let i = 7; i >= 0; i--) {
-      const start = new Date(now); start.setDate(now.getDate() - now.getDay() + 1 - i * 7); start.setHours(0,0,0,0)
-      const end = new Date(start); end.setDate(start.getDate() + 7)
-      const ws = sessions.filter(s => s.user_id === uid && s.discipline === disc && new Date(s.date) >= start && new Date(s.date) < end)
-      result.push({ week: `S${8 - i}`, val: +ws.reduce((a, s) => a + (+s.distance || 0), 0).toFixed(1), min: ws.reduce((a, s) => a + (s.duration || 0), 0) })
-    }
-    return result
+  // Monday of the week containing a given date (matches global weekStart() logic)
+  const toWeekStart = (date) => {
+    const d = new Date(date)
+    d.setDate(d.getDate() - d.getDay() + 1)
+    d.setHours(0, 0, 0, 0)
+    return d
   }
+
+  // Build the shared week-start list: S1 = week of the earliest session across all users
+  const allWeekStarts = (() => {
+    const now = new Date()
+    const currentWS = toWeekStart(now)
+    const realSessions = sessions.filter(s => !isPlanned(s))
+    if (!realSessions.length) {
+      // fallback: last 8 weeks
+      return Array.from({ length: 8 }, (_, i) => {
+        const d = new Date(currentWS); d.setDate(d.getDate() - (7 - i) * 7); return d
+      })
+    }
+    const earliest = realSessions.reduce((min, s) => s.date < min ? s.date : min, realSessions[0].date)
+    const s1 = toWeekStart(new Date(earliest))
+    const weeks = []
+    const d = new Date(s1)
+    while (d <= currentWS) { weeks.push(new Date(d)); d.setDate(d.getDate() + 7) }
+    return weeks
+  })()
+
+  const getWeeks = (uid, disc) =>
+    allWeekStarts.map(start => {
+      const end = new Date(start); end.setDate(start.getDate() + 7)
+      const label = `${String(start.getDate()).padStart(2, '0')}/${String(start.getMonth() + 1).padStart(2, '0')}`
+      const ws = sessions.filter(s => s.user_id === uid && s.discipline === disc && !isPlanned(s) && new Date(s.date) >= start && new Date(s.date) < end)
+      return { week: label, val: +ws.reduce((a, s) => a + (+s.distance || 0), 0).toFixed(1), min: ws.reduce((a, s) => a + (s.duration || 0), 0) }
+    })
   const score = (uid) => {
     const s = sessions.filter(x => x.user_id === uid)
     const ws = weekStart(); const week = s.filter(x => new Date(x.date) >= ws)
