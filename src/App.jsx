@@ -66,26 +66,110 @@ const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
 function buildSystem(uid, sessions, wellness) {
+  // Safe localStorage reader
+  const ls = (key, fallback) => { try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback } catch { return fallback } }
+
   const today = todayStr()
+  const userSessions = sessions.filter(x => x.user_id === uid && !isPlanned(x))
   const all = sessions.filter(x => x.user_id === uid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
   const past = all.filter(x => x.date < today && !isPlanned(x))
   const future = all.filter(x => isPlanned(x) || x.date >= today)
   const w = wellness.filter(x => x.user_id === uid).slice(0, 7)
+
+  // ── Profil physique ──
+  const weights = ls(`weights_${uid}`, [])
+  const lastWeight = weights.length ? weights[weights.length - 1] : null
+  const hrMax = ls(`hrMax_${uid}`, '')
+  const hrRest = ls(`hrRest_${uid}`, '')
+  const vma = ls(`vma_${uid}`, '')
+
+  // ── Score de forme ──
+  const lastWell = w[0]
+  const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
+  const ws = weekStart()
+  const wsStr = `${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`
+  const weekSessions = userSessions.filter(s => s.date >= wsStr)
+  const totalMin = weekSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const loadScore = Math.min(100, (totalMin / 300) * 100)
+  const formPct = wellScore !== null ? Math.round(wellScore * 0.70 + (100 - loadScore * 0.5) * 0.30) : null
+  const formTxt = formPct === null ? 'Données insuffisantes'
+    : formPct >= 68 ? `${formPct}% — Prêt à s'entraîner fort`
+    : formPct >= 45 ? `${formPct}% — Entraînement modéré conseillé`
+    : `${formPct}% — Repos recommandé`
+
+  // ── Jalons ──
+  const milestoneLines = [
+    { disc: 'Natation',       label: '750m natation',   target: 750,   toM: s => s.distance_unit === 'm'  ? +s.distance : +s.distance * 1000 },
+    { disc: 'Vélo',           label: '20km vélo',       target: 20000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
+    { disc: 'Course à pied',  label: '5km course à pied', target: 5000, toM: s => s.distance_unit === 'km' ? +s.distance * 1000 : +s.distance },
+  ].map(m => {
+    const best = userSessions.filter(s => s.discipline === m.disc && s.distance).reduce((mx, s) => Math.max(mx, m.toM(s)), 0)
+    const pct = Math.min(100, Math.round((best / m.target) * 100))
+    const bestFmt = m.disc === 'Natation' ? `${Math.round(best)}m` : `${(best / 1000).toFixed(2)}km`
+    return `• ${m.label} : ${pct}%${best > 0 ? ` (record : ${bestFmt})` : ''}`
+  }).join('\n')
+
+  // ── Chaussures ──
+  const shoes = ls(`shoes_${uid}`, []).filter(s => !s.archived)
+  const shoeLines = shoes.length ? shoes.map(shoe => {
+    const fromSessions = userSessions.filter(s => s.discipline === 'Course à pied' && s.date >= shoe.purchaseDate && s.distance).reduce((a, s) => a + (s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance), 0)
+    const km = Math.round((+shoe.startKm || 0) + fromSessions)
+    const max = +shoe.maxKm || 700
+    const pct = Math.round(km / max * 100)
+    const state = pct >= 100 ? '🔴 À remplacer' : pct >= 80 ? '🟡 Fin de vie' : '🟢 OK'
+    return `• ${shoe.name} : ${km}/${max} km (${pct}%) ${state}`
+  }).join('\n') : 'Aucune chaussure enregistrée.'
+
+  // ── Objectif course ──
+  const simTarget = ls(`simTarget_${uid}`, { h: '1', m: '30' })
+  const simStr = `${simTarget.h}h${String(simTarget.m).padStart(2,'0')}`
+
+  // ── Plans IA (tronqués pour ne pas saturer le contexte) ──
+  const aiPlan = ls(`aiPlan_${uid}`, null)
+  const aiNutrition = ls(`aiNutrition_${uid}`, null)
+
   return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
-PROFIL : ${USERS[uid].profile}
-OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026. Jour J-${daysLeft()}.
+Réponds toujours en français, de façon directe, bienveillante et concrète.
 
-SÉANCES PASSÉES (réelles, déjà effectuées) :
-${past.slice(0, 15).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${x.notes ? ` | ${x.notes}` : ''}`).join('\n') || 'Aucune séance passée.'}
+━━ PROFIL ━━
+${USERS[uid].profile}
+${lastWeight ? `Poids : ${lastWeight.weight} kg (${lastWeight.date})` : 'Poids : non renseigné'}
+${hrMax ? `FC max : ${hrMax} bpm${hrRest ? ` | FC repos : ${hrRest} bpm` : ''}` : 'FC max : non renseignée'}
+${vma ? `VMA : ${vma} km/h` : 'VMA : non renseignée'}
 
-SÉANCES FUTURES PLANIFIÉES (pas encore effectuées, sans RPE réel) :
-${future.slice(0, 10).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [PLANIFIÉE — aucun RPE réel disponible]`).join('\n') || 'Aucune séance planifiée.'}
+━━ OBJECTIF ━━
+Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — 15 décembre 2026 — J-${daysLeft()}
+Temps cible : ${simStr}
 
-RÈGLE IMPORTANTE : N'analyse pas les séances futures comme des séances réalisées. Utilise-les uniquement pour estimer la charge à venir et adapter tes conseils de récupération, d'intensité ou de nutrition. Ne mentionne jamais un RPE pour une séance planifiée.
+━━ SCORE DE FORME DU JOUR ━━
+${formTxt}
+Volume semaine en cours : ${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')} (${weekSessions.length} séance${weekSessions.length > 1 ? 's' : ''})
 
-BIEN-ÊTRE (7 derniers jours) :
-${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Fatigue ${x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
-Réponds en français, direct, bienveillant et concret.`
+━━ JALONS OBJECTIFS ━━
+${milestoneLines}
+
+━━ SÉANCES PASSÉES — 20 dernières réelles ━━
+${past.slice(0, 20).map(x => {
+  let extra = {}; try { extra = JSON.parse(x.notes || '{}') } catch {}
+  const typeInfo = extra.capType || extra.nageType || extra.veloType || extra.muscuFocus || ''
+  return `• ${x.date} | ${x.discipline}${typeInfo ? ` (${typeInfo})` : ''} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${extra.userNotes ? ` | "${extra.userNotes}"` : ''}`
+}).join('\n') || 'Aucune séance passée.'}
+
+━━ SÉANCES PLANIFIÉES (futures — sans RPE réel) ━━
+${future.slice(0, 10).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [PLANIFIÉE]`).join('\n') || 'Aucune séance planifiée.'}
+⚠️ Ne jamais analyser les séances planifiées comme réalisées. S'en servir uniquement pour anticiper la charge future.
+
+━━ BIEN-ÊTRE — 7 derniers jours ━━
+${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Énergie ${6 - x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
+
+━━ CHAUSSURES DE COURSE ━━
+${shoeLines}
+${aiPlan ? `
+━━ DERNIER PLAN DE SEMAINE IA ━━
+${aiPlan.slice(0, 800)}${aiPlan.length > 800 ? '\n[...]' : ''}` : ''}
+${aiNutrition ? `
+━━ DERNIER PLAN NUTRITIONNEL ━━
+${aiNutrition.slice(0, 600)}${aiNutrition.length > 600 ? '\n[...]' : ''}` : ''}`
 }
 
 const S = {
