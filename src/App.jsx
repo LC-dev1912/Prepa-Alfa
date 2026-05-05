@@ -66,18 +66,24 @@ const todayStr = () => new Date().toISOString().slice(0, 10)
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
 function buildSystem(uid, sessions, wellness) {
-  const all = sessions.filter(x => x.user_id === uid).slice(-20)
-  const past = all.filter(x => !isPlanned(x) && x.date <= todayStr())
-  const planned = all.filter(x => isPlanned(x) || x.date > todayStr())
-  const w = wellness.filter(x => x.user_id === uid).slice(-7)
+  const today = todayStr()
+  const all = sessions.filter(x => x.user_id === uid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
+  const past = all.filter(x => x.date < today && !isPlanned(x))
+  const future = all.filter(x => isPlanned(x) || x.date >= today)
+  const w = wellness.filter(x => x.user_id === uid).slice(0, 7)
   return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
 PROFIL : ${USERS[uid].profile}
 OBJECTIF : Triathlon Sprint (750m nat / 20km vélo / 5km CAP) — Décembre 2026. Jour J-${daysLeft()}.
-SÉANCES RÉELLES (passées) :
-${past.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${x.notes ? ` | ${x.notes}` : ''}`).join('\n') || 'Aucune séance réelle.'}
-SÉANCES PLANIFIÉES (futures) :
-${planned.map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [Planifiée — pas encore réalisée]`).join('\n') || 'Aucune séance planifiée.'}
-BIEN-ÊTRE :
+
+SÉANCES PASSÉES (réelles, déjà effectuées) :
+${past.slice(0, 15).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${x.notes ? ` | ${x.notes}` : ''}`).join('\n') || 'Aucune séance passée.'}
+
+SÉANCES FUTURES PLANIFIÉES (pas encore effectuées, sans RPE réel) :
+${future.slice(0, 10).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [PLANIFIÉE — aucun RPE réel disponible]`).join('\n') || 'Aucune séance planifiée.'}
+
+RÈGLE IMPORTANTE : N'analyse pas les séances futures comme des séances réalisées. Utilise-les uniquement pour estimer la charge à venir et adapter tes conseils de récupération, d'intensité ou de nutrition. Ne mentionne jamais un RPE pour une séance planifiée.
+
+BIEN-ÊTRE (7 derniers jours) :
 ${w.map(x => `• ${x.date} | Sommeil ${x.sleep}/5 | Fatigue ${x.fatigue}/5 | Humeur ${x.mood}/5`).join('\n') || 'Aucune donnée.'}
 Réponds en français, direct, bienveillant et concret.`
 }
