@@ -31,23 +31,20 @@ const EXERCISE_SUGGESTIONS = [
   'Tirage vertical', 'Gainage frontal', 'Curl biceps', 'Extensions triceps',
 ]
 
-function useLocalStorage(key, initial) {
-  const initialRef = useRef(initial)
-  const [val, setVal] = useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : initialRef.current } catch { return initialRef.current }
-  })
-  // Re-read from localStorage whenever the key changes (e.g. uid switch)
-  useEffect(() => {
-    try { const s = localStorage.getItem(key); setVal(s !== null ? JSON.parse(s) : initialRef.current) } catch { setVal(initialRef.current) }
-  }, [key])
-  const update = useCallback((v) => {
-    setVal(prev => {
-      const next = typeof v === 'function' ? v(prev) : v
-      try { localStorage.setItem(key, JSON.stringify(next)) } catch {}
-      return next
-    })
-  }, [key])
-  return [val, update]
+function useRemoteData(uid, key, initial, userData, updateUserData) {
+  const value = userData[uid]?.[key] !== undefined ? userData[uid][key] : initial
+  const valueRef = useRef(value)
+  valueRef.current = value
+  const setValue = useCallback(async (newVal) => {
+    const resolved = typeof newVal === 'function' ? newVal(valueRef.current) : newVal
+    updateUserData(uid, key, resolved)
+    const { error } = await supabase.from('user_data').upsert(
+      { user_id: uid, key, value: resolved, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,key' }
+    )
+    if (error) console.error('user_data upsert error:', error)
+  }, [uid, key, updateUserData])
+  return [value, setValue]
 }
 
 async function askCoach(system, messages) {
@@ -65,9 +62,8 @@ const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
 
-function buildSystem(uid, sessions, wellness) {
-  // Safe localStorage reader
-  const ls = (key, fallback) => { try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback } catch { return fallback } }
+function buildSystem(uid, sessions, wellness, userData = {}) {
+  const ud = userData[uid] || {}
 
   const today = todayStr()
   const userSessions = sessions.filter(x => x.user_id === uid && !isPlanned(x))
@@ -77,11 +73,11 @@ function buildSystem(uid, sessions, wellness) {
   const w = wellness.filter(x => x.user_id === uid).slice(0, 7)
 
   // ── Profil physique ──
-  const weights = ls(`weights_${uid}`, [])
+  const weights = ud.weights || []
   const lastWeight = weights.length ? weights[weights.length - 1] : null
-  const hrMax = ls(`hrMax_${uid}`, '')
-  const hrRest = ls(`hrRest_${uid}`, '')
-  const vma = ls(`vma_${uid}`, '')
+  const hrMax = ud.hrMax || ''
+  const hrRest = ud.hrRest || ''
+  const vma = ud.vma || ''
 
   // ── Score de forme ──
   const lastWell = w[0]
@@ -110,7 +106,7 @@ function buildSystem(uid, sessions, wellness) {
   }).join('\n')
 
   // ── Chaussures ──
-  const shoes = ls(`shoes_${uid}`, []).filter(s => !s.archived)
+  const shoes = (ud.shoes || []).filter(s => !s.archived)
   const shoeLines = shoes.length ? shoes.map(shoe => {
     const fromSessions = userSessions.filter(s => s.discipline === 'Course à pied' && s.date >= shoe.purchaseDate && s.distance).reduce((a, s) => a + (s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance), 0)
     const km = Math.round((+shoe.startKm || 0) + fromSessions)
@@ -121,12 +117,12 @@ function buildSystem(uid, sessions, wellness) {
   }).join('\n') : 'Aucune chaussure enregistrée.'
 
   // ── Objectif course ──
-  const simTarget = ls(`simTarget_${uid}`, { h: '1', m: '30' })
+  const simTarget = ud.simTarget || { h: '1', m: '30' }
   const simStr = `${simTarget.h}h${String(simTarget.m).padStart(2,'0')}`
 
   // ── Plans IA (tronqués pour ne pas saturer le contexte) ──
-  const aiPlan = ls(`aiPlan_${uid}`, null)
-  const aiNutrition = ls(`aiNutrition_${uid}`, null)
+  const aiPlan = ud.aiPlan || null
+  const aiNutrition = ud.aiNutrition || null
 
   return `Tu es le coach personnel de ${USERS[uid].name}, expert triathlon Sprint, préparation physique et nutrition sportive.
 Réponds toujours en français, de façon directe, bienveillante et concrète.
@@ -614,7 +610,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   )
 }
 
-function SessionDetail({ session, uid, sessions, wellness }) {
+function SessionDetail({ session, uid, sessions, wellness, userData }) {
   const [analysis, setAnalysis] = useState(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(true)
   const [msgs, setMsgs] = useState([])
@@ -625,7 +621,7 @@ function SessionDetail({ session, uid, sessions, wellness }) {
     if (!session) return
     const msg = `Analyse cette séance : ${session.discipline}, ${session.date}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}${session.vitesse ? `, ${session.vitesse}km/h` : ''}, RPE ${session.rpe}/10${session.notes ? `, notes: ${session.notes}` : ''}.
 Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) Conseil prochain.`
-    askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: msg }])
+    askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: msg }])
       .then(r => { setAnalysis(r); setLoadingAnalysis(false) })
       .catch(() => { setAnalysis('Erreur lors de l\'analyse.'); setLoadingAnalysis(false) })
   }, [session?.id])
@@ -635,7 +631,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
     const txt = input.trim(); setInput(''); setSending(true)
     const history = msgs.map(m => ({ role: m.role, content: m.content }))
     setMsgs(p => [...p, { role: 'user', content: txt }])
-    const reply = await askCoach(buildSystem(uid, sessions, wellness) + `\nContexte: discussion sur séance du ${session.date} — ${session.discipline}.`, [...history, { role: 'user', content: txt }])
+    const reply = await askCoach(buildSystem(uid, sessions, wellness, userData) + `\nContexte: discussion sur séance du ${session.date} — ${session.discipline}.`, [...history, { role: 'user', content: txt }])
     setMsgs(p => [...p, { role: 'assistant', content: reply }])
     setSending(false)
   }
@@ -820,7 +816,7 @@ function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
   )
 }
 
-function HistoryPage({ uid, sessions, wellness, setSessions }) {
+function HistoryPage({ uid, sessions, wellness, setSessions, userData }) {
   const [filter, setFilter] = useState('Toutes')
   const [selected, setSelected] = useState(null)
   const [plannedSelected, setPlannedSelected] = useState(null)
@@ -869,7 +865,7 @@ function HistoryPage({ uid, sessions, wellness, setSessions }) {
       </Card>
       <Sheet open={!!selected} onClose={() => setSelected(null)} title="Détail de la séance">
         {selected && <>
-          <SessionDetail session={selected} uid={uid} sessions={sessions} wellness={wellness} />
+          <SessionDetail session={selected} uid={uid} sessions={sessions} wellness={wellness} userData={userData} />
           <button onClick={() => deleteSession(selected.id)} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: S.radiusSm, border: `1px solid ${S.red}`, background: 'transparent', color: S.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
         </>}
       </Sheet>
@@ -989,7 +985,7 @@ function DuelPage({ sessions }) {
   )
 }
 
-function ChatPage({ uid, sessions, wellness }) {
+function ChatPage({ uid, sessions, wellness, userData }) {
   const makeWelcome = (u) => ({ role: 'assistant', content: `Bonjour ${USERS[u].name} 👋\n\nJe suis ton coach. J'ai accès à tout ton historique.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...` })
   const [view, setView] = useState('list')
   const [convList, setConvList] = useState([])
@@ -1062,7 +1058,7 @@ function ChatPage({ uid, sessions, wellness }) {
 
     try {
       const history = msgs.map(m => ({ role: m.role, content: m.content }))
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [...history, newUserMsg])
+      const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [...history, newUserMsg])
       const replyMsg = { role: 'assistant', content: reply }
       const finalMsgs = [...newMsgs, replyMsg]
       setMsgs(finalMsgs)
@@ -1175,10 +1171,10 @@ const PLAN = {
   ],
 }
 
-function PlanPage({ uid, sessions, wellness, setSessions }) {
-  const [aiPlan, setAiPlan] = useLocalStorage(`aiPlan_${uid}`, null)
-  const [aiNutrition, setAiNutrition] = useLocalStorage(`aiNutrition_${uid}`, null)
-  const [simTarget, setSimTarget] = useLocalStorage(`simTarget_${uid}`, { h: '1', m: '30' })
+function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserData }) {
+  const [aiPlan, setAiPlan] = useRemoteData(uid, 'aiPlan', null, userData, updateUserData)
+  const [aiNutrition, setAiNutrition] = useRemoteData(uid, 'aiNutrition', null, userData, updateUserData)
+  const [simTarget, setSimTarget] = useRemoteData(uid, 'simTarget', { h: '1', m: '30' }, userData, updateUserData)
   const [generating, setGenerating] = useState(false)
   const [generatingNutrition, setGeneratingNutrition] = useState(false)
   const [plannedSelected, setPlannedSelected] = useState(null)
@@ -1217,7 +1213,7 @@ function PlanPage({ uid, sessions, wellness, setSessions }) {
   async function generateWeek() {
     setGenerating(true)
     try {
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: `Génère-moi un planning d'entraînement complet pour la semaine prochaine. Tiens compte de mes séances récentes, de mon niveau de fatigue, et de l'objectif triathlon Sprint en décembre 2026. Donne-moi 5 à 6 séances précises avec : discipline, durée, intensité (RPE cible), objectif de la séance et un conseil clé. Sois concret et adapté à mon niveau actuel.` }])
+      const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: `Génère-moi un planning d'entraînement complet pour la semaine prochaine. Tiens compte de mes séances récentes, de mon niveau de fatigue, et de l'objectif triathlon Sprint en décembre 2026. Donne-moi 5 à 6 séances précises avec : discipline, durée, intensité (RPE cible), objectif de la séance et un conseil clé. Sois concret et adapté à mon niveau actuel.` }])
       setAiPlan(reply)
     } catch { setAiPlan('Erreur lors de la génération. Réessaie.') }
     setGenerating(false)
@@ -1227,7 +1223,7 @@ function PlanPage({ uid, sessions, wellness, setSessions }) {
     setGeneratingNutrition(true)
     try {
       const weekMins = sessions.filter(s => s.user_id === uid && new Date(s.date) >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0)
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: `Génère mon plan nutritionnel pour les 7 prochains jours. Volume d'entraînement cette semaine : ${weekMins} minutes. Pour chaque jour donne : calories totales, protéines (g), glucides (g), lipides (g), et 2-3 repas/collations clés. Mets en avant les jours de grosse séance vs jours de repos. Sois concret, en français, format structuré.` }])
+      const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: `Génère mon plan nutritionnel pour les 7 prochains jours. Volume d'entraînement cette semaine : ${weekMins} minutes. Pour chaque jour donne : calories totales, protéines (g), glucides (g), lipides (g), et 2-3 repas/collations clés. Mets en avant les jours de grosse séance vs jours de repos. Sois concret, en français, format structuré.` }])
       setAiNutrition(reply)
     } catch { setAiNutrition('Erreur lors de la génération. Réessaie.') }
     setGeneratingNutrition(false)
@@ -1384,14 +1380,14 @@ function PlanPage({ uid, sessions, wellness, setSessions }) {
   )
 }
 
-function ProfilePage({ uid, sessions }) {
-  const [shoes, setShoes] = useLocalStorage(`shoes_${uid}`, [])
+function ProfilePage({ uid, sessions, userData, updateUserData }) {
+  const [shoes, setShoes] = useRemoteData(uid, 'shoes', [], userData, updateUserData)
   const [showShoeForm, setShowShoeForm] = useState(false)
   const [newShoe, setNewShoe] = useState({ name: '', brand: '', purchaseDate: todayStr(), startKm: '0', maxKm: '700' })
-  const [hrMax, setHrMax] = useLocalStorage(`hrMax_${uid}`, '')
-  const [hrRest, setHrRest] = useLocalStorage(`hrRest_${uid}`, '')
-  const [vma, setVma] = useLocalStorage(`vma_${uid}`, '')
-  const [weights, setWeights] = useLocalStorage(`weights_${uid}`, [])
+  const [hrMax, setHrMax] = useRemoteData(uid, 'hrMax', '', userData, updateUserData)
+  const [hrRest, setHrRest] = useRemoteData(uid, 'hrRest', '', userData, updateUserData)
+  const [vma, setVma] = useRemoteData(uid, 'vma', '', userData, updateUserData)
+  const [weights, setWeights] = useRemoteData(uid, 'weights', [], userData, updateUserData)
   const [newWeight, setNewWeight] = useState('')
 
   const userSessions = sessions.filter(s => s.user_id === uid)
@@ -1957,13 +1953,32 @@ export default function App() {
   const [wellness, setWellness] = useState([])
   const [analysis, setAnalysis] = useState(null)
   const [booting, setBooting] = useState(true)
+  const [userData, setUserData] = useState({})
+
+  const updateUserData = useCallback((userId, key, value) => {
+    setUserData(prev => ({
+      ...prev,
+      [userId]: { ...(prev[userId] || {}), [key]: value }
+    }))
+  }, [])
 
   const load = useCallback(async () => {
-    const [{ data: s }, { data: w }] = await Promise.all([
+    const [{ data: s }, { data: w }, { data: ud }] = await Promise.all([
       supabase.from('sessions').select('*').order('date', { ascending: false }),
       supabase.from('wellness').select('*').order('date', { ascending: false }),
+      supabase.from('user_data').select('*'),
     ])
-    setSessions(s || []); setWellness(w || []); setBooting(false)
+    setSessions(s || [])
+    setWellness(w || [])
+    if (ud) {
+      const byUser = {}
+      ud.forEach(row => {
+        if (!byUser[row.user_id]) byUser[row.user_id] = {}
+        byUser[row.user_id][row.key] = row.value
+      })
+      setUserData(byUser)
+    }
+    setBooting(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -1971,7 +1986,7 @@ export default function App() {
   async function handleAnalyze(session, last) {
     try {
       const msg = `Séance : ${session.discipline}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}, RPE ${session.rpe}/10.${session.notes ? ` Notes: ${session.notes}.` : ''}${last ? ` Dernière (${last.date}): ${last.duration}min, RPE ${last.rpe}/10.` : ''} Analyse en 4 lignes max.`
-      const reply = await askCoach(buildSystem(uid, sessions, wellness), [{ role: 'user', content: msg }])
+      const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: msg }])
       setAnalysis(reply)
     } catch {}
   }
@@ -2027,11 +2042,11 @@ export default function App() {
           <>
             {tab === 'home' && <Dashboard uid={uid} sessions={sessions} wellness={wellness} onSave={load} />}
             {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
-            {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} />}
-            {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
-            {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} />}
+            {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} userData={userData} />}
+            {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} userData={userData} />}
+            {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} userData={userData} updateUserData={updateUserData} />}
             {tab === 'duel' && <DuelPage sessions={sessions} />}
-            {tab === 'profil' && <ProfilePage key={uid} uid={uid} sessions={sessions} />}
+            {tab === 'profil' && <ProfilePage key={uid} uid={uid} sessions={sessions} userData={userData} updateUserData={updateUserData} />}
           </>
         )}
       </div>
