@@ -1980,28 +1980,27 @@ export default function App() {
       })
     }
 
-    // One-time migration: if localStorage has data that Supabase doesn't, push it up
+    // One-time migration: push any localStorage data to Supabase then wipe it
     const legacyKeys = ['shoes', 'hrMax', 'hrRest', 'vma', 'weights', 'simTarget', 'aiPlan', 'aiNutrition']
     const migrateOps = []
+    const keysToWipe = []
     for (const userId of Object.keys(USERS)) {
       if (!byUser[userId]) byUser[userId] = {}
       for (const key of legacyKeys) {
-        if (byUser[userId][key] !== undefined) continue // Already in Supabase, skip
-        const raw = localStorage.getItem(`${key}_${userId}`)
+        const lsKey = `${key}_${userId}`
+        const raw = localStorage.getItem(lsKey)
         if (raw === null) continue
+        keysToWipe.push(lsKey) // always wipe, even if Supabase already has it
+        if (byUser[userId][key] !== undefined) continue // already in Supabase, don't overwrite
         try {
           const value = JSON.parse(raw)
           byUser[userId][key] = value
-          migrateOps.push(
-            supabase.from('user_data').upsert(
-              { user_id: userId, key, value },
-              { onConflict: 'user_id,key' }
-            )
-          )
+          migrateOps.push(supabase.from('user_data').upsert({ user_id: userId, key, value }, { onConflict: 'user_id,key' }))
         } catch {}
       }
     }
     if (migrateOps.length > 0) await Promise.all(migrateOps)
+    keysToWipe.forEach(k => localStorage.removeItem(k))
 
     setUserData(byUser)
     setBooting(false)
