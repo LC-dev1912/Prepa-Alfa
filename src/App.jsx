@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
 import { supabase } from './supabase.js'
 import {
   Waves, Bike, Footprints, Dumbbell, Zap, HeartPulse,
@@ -32,18 +32,24 @@ const EXERCISE_SUGGESTIONS = [
 ]
 
 function useRemoteData(uid, key, initial, userData, updateUserData) {
+  const addToast = useToast()
   const value = userData[uid]?.[key] !== undefined ? userData[uid][key] : initial
   const valueRef = useRef(value)
   valueRef.current = value
   const setValue = useCallback(async (newVal) => {
     const resolved = typeof newVal === 'function' ? newVal(valueRef.current) : newVal
     updateUserData(uid, key, resolved)
-    const { error } = await supabase.from('user_data').upsert(
-      { user_id: uid, key, value: resolved, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id,key' }
-    )
-    if (error) console.error('user_data upsert error:', error)
-  }, [uid, key, updateUserData])
+    try {
+      const { error } = await supabase.from('user_data').upsert(
+        { user_id: uid, key, value: resolved, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,key' }
+      )
+      if (error) throw error
+    } catch (e) {
+      console.error('user_data upsert error:', e)
+      addToast?.('Sauvegarde échouée — réessaie dans un instant')
+    }
+  }, [uid, key, updateUserData, addToast])
   return [value, setValue]
 }
 
@@ -174,6 +180,31 @@ const S = {
   radius: 20, radiusSm: 12,
 }
 
+// ── Toast system ──
+const ToastContext = createContext(null)
+const useToast = () => useContext(ToastContext)
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([])
+  const add = useCallback((msg, type = 'error') => {
+    const id = Date.now() + Math.random()
+    setToasts(p => [...p.slice(-3), { msg, type, id }])
+    setTimeout(() => setToasts(p => p.filter(x => x.id !== id)), 4000)
+  }, [])
+  return (
+    <ToastContext.Provider value={add}>
+      {children}
+      <div style={{ position: 'fixed', top: 16, left: 0, right: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{ padding: '10px 20px', borderRadius: 99, fontSize: 14, fontWeight: 600, color: '#fff', background: t.type === 'error' ? S.red : t.type === 'warning' ? S.yellow : S.green, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', maxWidth: 360, textAlign: 'center' }}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+
 const discColor = (disc) => ({ Natation: '#007AFF', Vélo: '#FF9500', 'Course à pied': ORANGE, Musculation: '#AF52DE', Brick: '#FF3B30', Récupération: S.green })[disc] || S.textSec
 
 const isPlanned = (session) => {
@@ -232,6 +263,7 @@ function Sheet({ open, onClose, children, title }) {
 }
 
 function WellnessForm({ uid, wellness, onSave }) {
+  const addToast = useToast()
   const t = todayStr()
   const ex = wellness.find(w => w.user_id === uid && w.date === t)
   const [vals, setVals] = useState({ sleep: ex?.sleep || 3, fatigue: ex?.fatigue || 3, mood: ex?.mood || 3 })
@@ -244,13 +276,16 @@ function WellnessForm({ uid, wellness, onSave }) {
   const onChange = (key, v) => { setVals(p => ({ ...p, [key]: key === 'fatigue' ? 6 - v : v })); setSaved(false) }
   async function save() {
     setSaving(true)
-    const { error } = await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
-    if (error) {
-      console.error('Wellness save error:', error)
-      setSaving(false)
-      return
+    try {
+      const { error } = await supabase.from('wellness').upsert({ user_id: uid, date: t, ...vals }, { onConflict: 'user_id,date' })
+      if (error) throw error
+      await onSave()
+      setSaved(true)
+    } catch (e) {
+      console.error('Wellness save error:', e)
+      addToast('Check-in non sauvegardé — réessaie')
     }
-    await onSave(); setSaved(true); setSaving(false)
+    setSaving(false)
   }
   return (
     <Card>
@@ -310,6 +345,7 @@ function Milestones({ uid, sessions }) {
 }
 
 function SessionForm({ uid, sessions, onSave, onAnalyze }) {
+  const addToast = useToast()
   const [f, setF] = useState({
     date: todayStr(), discipline: 'Course à pied', duration: '', distance: '', distance_unit: 'km',
     pace: '', hr_avg: '', hr_max: '', rpe: '6', conditions: '', notes: '', vitesse: '', denivele: '',
@@ -365,6 +401,13 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
 
   async function submit() {
     if (!f.duration) return
+    // Validate inputs before sending to Supabase
+    const dur = +f.duration
+    if (!Number.isFinite(dur) || dur <= 0 || dur > 1440) { addToast('Durée invalide (1–1440 min)'); return }
+    if (f.distance && (!Number.isFinite(+f.distance) || +f.distance < 0)) { addToast('Distance invalide'); return }
+    if (!isFuture && (+f.rpe < 1 || +f.rpe > 10)) { addToast('RPE invalide (1–10)'); return }
+    if (f.hr_avg && (+f.hr_avg < 20 || +f.hr_avg > 250)) { addToast('FC moy invalide'); return }
+    if (f.hr_max && (+f.hr_max < 20 || +f.hr_max > 300)) { addToast('FC max invalide'); return }
     setSaving(true)
 
     // Build discipline-specific extra data (all serialized into notes)
@@ -416,19 +459,21 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
     }
 
     console.log('Inserting session:', session)
-    const { error } = await supabase.from('sessions').insert(session)
-    if (error) {
-      console.error('Supabase insert error:', error)
-      setSaving(false)
-      return
+    try {
+      const { error } = await supabase.from('sessions').insert(session)
+      if (error) throw error
+      await onSave()
+      onAnalyze(session, last)
+      setF(p => ({
+        ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '',
+        exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }],
+        brickLegs: [{ discipline: 'Vélo', duration: '', distance: '' }, { discipline: 'Course à pied', duration: '', distance: '' }],
+        brickTransitions: [''],
+      }))
+    } catch (e) {
+      console.error('Session insert error:', e)
+      addToast('Impossible d\'enregistrer la séance')
     }
-    await onSave(); onAnalyze(session, last)
-    setF(p => ({
-      ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '',
-      exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }],
-      brickLegs: [{ discipline: 'Vélo', duration: '', distance: '' }, { discipline: 'Course à pied', duration: '', distance: '' }],
-      brickTransitions: [''],
-    }))
     setSaving(false)
   }
 
@@ -611,6 +656,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
 }
 
 function SessionDetail({ session, uid, sessions, wellness, userData }) {
+  const addToast = useToast()
   const [analysis, setAnalysis] = useState(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(true)
   const [msgs, setMsgs] = useState([])
@@ -631,8 +677,13 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
     const txt = input.trim(); setInput(''); setSending(true)
     const history = msgs.map(m => ({ role: m.role, content: m.content }))
     setMsgs(p => [...p, { role: 'user', content: txt }])
-    const reply = await askCoach(buildSystem(uid, sessions, wellness, userData) + `\nContexte: discussion sur séance du ${session.date} — ${session.discipline}.`, [...history, { role: 'user', content: txt }])
-    setMsgs(p => [...p, { role: 'assistant', content: reply }])
+    try {
+      const reply = await askCoach(buildSystem(uid, sessions, wellness, userData) + `\nContexte: discussion sur séance du ${session.date} — ${session.discipline}.`, [...history, { role: 'user', content: txt }])
+      setMsgs(p => [...p, { role: 'assistant', content: reply }])
+    } catch {
+      addToast?.('Coach temporairement indisponible')
+      setMsgs(p => [...p, { role: 'assistant', content: 'Coach temporairement indisponible. Réessaie dans un instant.' }])
+    }
     setSending(false)
   }
   if (!session) return null
@@ -703,6 +754,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
 }
 
 function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
+  const addToast = useToast()
   const [showComplete, setShowComplete] = useState(false)
   const [form, setForm] = useState({ rpe: '7', distance: '', notes: '' })
   const [saving, setSaving] = useState(false)
@@ -730,11 +782,16 @@ function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
     if (form.notes) updated.userNotes = form.notes
     const updates = { rpe: +form.rpe, notes: Object.keys(updated).length ? JSON.stringify(updated) : null }
     if (form.distance) updates.distance = +form.distance
-    const { error } = await supabase.from('sessions').update(updates).eq('id', session.id)
-    if (error) { console.error('Complete session error:', error); setSaving(false); return }
-    onDone(session.id, updates)
+    try {
+      const { error } = await supabase.from('sessions').update(updates).eq('id', session.id)
+      if (error) throw error
+      onDone(session.id, updates)
+      onClose()
+    } catch (e) {
+      console.error('Complete session error:', e)
+      addToast('Impossible de valider la séance')
+    }
     setSaving(false)
-    onClose()
   }
 
   return (
@@ -817,6 +874,7 @@ function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
 }
 
 function HistoryPage({ uid, sessions, wellness, setSessions, userData }) {
+  const addToast = useToast()
   const [filter, setFilter] = useState('Toutes')
   const [selected, setSelected] = useState(null)
   const [plannedSelected, setPlannedSelected] = useState(null)
@@ -824,8 +882,15 @@ function HistoryPage({ uid, sessions, wellness, setSessions, userData }) {
   const list = sessions.filter(s => s.user_id === uid && (filter === 'Toutes' || s.discipline === filter)).sort((a, b) => new Date(b.date) - new Date(a.date))
   const deleteSession = async (id) => {
     if (!window.confirm('Supprimer cette séance ?')) return
-    await supabase.from('sessions').delete().eq('id', id)
-    setSessions(prev => prev.filter(s => s.id !== id)); setSelected(null)
+    try {
+      const { error } = await supabase.from('sessions').delete().eq('id', id)
+      if (error) throw error
+      setSessions(prev => prev.filter(s => s.id !== id))
+      setSelected(null)
+    } catch (e) {
+      console.error('Delete session error:', e)
+      addToast('Impossible de supprimer la séance')
+    }
   }
   const handleDone = (id, updates) => setSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
   return (
@@ -986,6 +1051,7 @@ function DuelPage({ sessions }) {
 }
 
 function ChatPage({ uid, sessions, wellness, userData }) {
+  const addToast = useToast()
   const makeWelcome = (u) => ({ role: 'assistant', content: `Bonjour ${USERS[u].name} 👋\n\nJe suis ton coach. J'ai accès à tout ton historique.\n\nPose-moi n'importe quelle question : entraînement, nutrition, récupération, stratégie de course...` })
   const [view, setView] = useState('list')
   const [convList, setConvList] = useState([])
@@ -1002,12 +1068,18 @@ function ChatPage({ uid, sessions, wellness, userData }) {
   useEffect(() => {
     async function loadConvs() {
       setLoadingList(true)
-      const { data } = await supabase
-        .from('conversations')
-        .select('id, title, updated_at, messages')
-        .eq('user_id', uid)
-        .order('updated_at', { ascending: false })
-      setConvList(data || [])
+      try {
+        const { data, error } = await supabase
+          .from('conversations')
+          .select('id, title, updated_at, messages')
+          .eq('user_id', uid)
+          .order('updated_at', { ascending: false })
+        if (error) throw error
+        setConvList(data || [])
+      } catch (e) {
+        console.error('Load convs error:', e)
+        addToast('Impossible de charger les conversations')
+      }
       setLoadingList(false)
     }
     loadConvs()
@@ -1035,12 +1107,14 @@ function ChatPage({ uid, sessions, wellness, userData }) {
 
   async function deleteConv(id, e) {
     e.stopPropagation()
-    await supabase.from('conversations').delete().eq('id', id)
-    setConvList(p => p.filter(c => c.id !== id))
-    if (convIdRef.current === id) {
-      setConvId(null)
-      convIdRef.current = null
-      setView('list')
+    try {
+      const { error } = await supabase.from('conversations').delete().eq('id', id)
+      if (error) throw error
+      setConvList(p => p.filter(c => c.id !== id))
+      if (convIdRef.current === id) { setConvId(null); convIdRef.current = null; setView('list') }
+    } catch (e) {
+      console.error('Delete conv error:', e)
+      addToast('Impossible de supprimer la conversation')
     }
   }
 
@@ -1056,20 +1130,29 @@ function ChatPage({ uid, sessions, wellness, userData }) {
     const isFirstUserMsg = !msgs.some(m => m.role === 'user')
     const title = isFirstUserMsg ? txt.slice(0, 40) : null
 
+    // ── AI call ──
+    let finalMsgs
     try {
       const history = msgs.map(m => ({ role: m.role, content: m.content }))
       const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [...history, newUserMsg])
-      const replyMsg = { role: 'assistant', content: reply }
-      const finalMsgs = [...newMsgs, replyMsg]
+      finalMsgs = [...newMsgs, { role: 'assistant', content: reply }]
       setMsgs(finalMsgs)
+    } catch {
+      setMsgs(p => [...p, { role: 'assistant', content: 'Coach temporairement indisponible. Réessaie.' }])
+      setLoading(false)
+      return
+    }
 
-      let cid = convIdRef.current
+    // ── Supabase save (non-blocking for the UI) ──
+    let cid = convIdRef.current
+    try {
       if (!cid) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('conversations')
           .insert({ user_id: uid, title: title || 'Conversation', messages: finalMsgs, updated_at: new Date().toISOString() })
           .select('id')
           .single()
+        if (error) throw error
         if (data) {
           cid = data.id
           setConvId(data.id)
@@ -1077,14 +1160,16 @@ function ChatPage({ uid, sessions, wellness, userData }) {
           setConvList(p => [{ id: data.id, title: title || 'Conversation', updated_at: new Date().toISOString(), messages: finalMsgs }, ...p])
         }
       } else {
-        await supabase
+        const { error } = await supabase
           .from('conversations')
           .update({ messages: finalMsgs, updated_at: new Date().toISOString() })
           .eq('id', cid)
+        if (error) throw error
         setConvList(p => p.map(c => c.id === cid ? { ...c, messages: finalMsgs, updated_at: new Date().toISOString() } : c))
       }
-    } catch {
-      setMsgs(p => [...p, { role: 'assistant', content: 'Erreur de connexion. Réessaie.' }])
+    } catch (e) {
+      console.error('Save conv error:', e)
+      addToast('Conversation non sauvegardée')
     }
     setLoading(false)
   }
@@ -1954,6 +2039,7 @@ export default function App() {
   const [analysis, setAnalysis] = useState(null)
   const [booting, setBooting] = useState(true)
   const [userData, setUserData] = useState({})
+  const [offline, setOffline] = useState(false)
 
   const updateUserData = useCallback((userId, key, value) => {
     setUserData(prev => ({
@@ -1963,46 +2049,67 @@ export default function App() {
   }, [])
 
   const load = useCallback(async () => {
-    const [{ data: s }, { data: w }, { data: ud }] = await Promise.all([
-      supabase.from('sessions').select('*').order('date', { ascending: false }),
-      supabase.from('wellness').select('*').order('date', { ascending: false }),
-      supabase.from('user_data').select('*'),
-    ])
-    setSessions(s || [])
-    setWellness(w || [])
+    try {
+      const [{ data: s, error: e1 }, { data: w, error: e2 }, { data: ud, error: e3 }] = await Promise.all([
+        supabase.from('sessions').select('*').order('date', { ascending: false }),
+        supabase.from('wellness').select('*').order('date', { ascending: false }),
+        supabase.from('user_data').select('*'),
+      ])
+      if (e1 || e2 || e3) throw new Error('Supabase fetch failed')
 
-    // Build userData map from Supabase rows
-    const byUser = {}
-    if (ud) {
-      ud.forEach(row => {
-        if (!byUser[row.user_id]) byUser[row.user_id] = {}
-        byUser[row.user_id][row.key] = row.value
-      })
-    }
+      // Cache pour fallback hors-ligne
+      try {
+        sessionStorage.setItem('cache_sessions', JSON.stringify(s || []))
+        sessionStorage.setItem('cache_wellness', JSON.stringify(w || []))
+      } catch {}
 
-    // One-time migration: push any localStorage data to Supabase then wipe it
-    const legacyKeys = ['shoes', 'hrMax', 'hrRest', 'vma', 'weights', 'simTarget', 'aiPlan', 'aiNutrition']
-    const migrateOps = []
-    const keysToWipe = []
-    for (const userId of Object.keys(USERS)) {
-      if (!byUser[userId]) byUser[userId] = {}
-      for (const key of legacyKeys) {
-        const lsKey = `${key}_${userId}`
-        const raw = localStorage.getItem(lsKey)
-        if (raw === null) continue
-        keysToWipe.push(lsKey) // always wipe, even if Supabase already has it
-        if (byUser[userId][key] !== undefined) continue // already in Supabase, don't overwrite
-        try {
-          const value = JSON.parse(raw)
-          byUser[userId][key] = value
-          migrateOps.push(supabase.from('user_data').upsert({ user_id: userId, key, value }, { onConflict: 'user_id,key' }))
-        } catch {}
+      setSessions(s || [])
+      setWellness(w || [])
+      setOffline(false)
+
+      // Build userData map from Supabase rows
+      const byUser = {}
+      if (ud) {
+        ud.forEach(row => {
+          if (!byUser[row.user_id]) byUser[row.user_id] = {}
+          byUser[row.user_id][row.key] = row.value
+        })
       }
-    }
-    if (migrateOps.length > 0) await Promise.all(migrateOps)
-    keysToWipe.forEach(k => localStorage.removeItem(k))
 
-    setUserData(byUser)
+      // One-time migration: push any localStorage data to Supabase then wipe it
+      const legacyKeys = ['shoes', 'hrMax', 'hrRest', 'vma', 'weights', 'simTarget', 'aiPlan', 'aiNutrition']
+      const migrateOps = []
+      const keysToWipe = []
+      for (const userId of Object.keys(USERS)) {
+        if (!byUser[userId]) byUser[userId] = {}
+        for (const key of legacyKeys) {
+          const lsKey = `${key}_${userId}`
+          const raw = localStorage.getItem(lsKey)
+          if (raw === null) continue
+          keysToWipe.push(lsKey)
+          if (byUser[userId][key] !== undefined) continue
+          try {
+            const value = JSON.parse(raw)
+            byUser[userId][key] = value
+            migrateOps.push(supabase.from('user_data').upsert({ user_id: userId, key, value }, { onConflict: 'user_id,key' }))
+          } catch {}
+        }
+      }
+      if (migrateOps.length > 0) await Promise.all(migrateOps)
+      keysToWipe.forEach(k => localStorage.removeItem(k))
+
+      setUserData(byUser)
+    } catch (e) {
+      console.error('Load error:', e)
+      // Fallback : dernières données connues depuis le cache sessionStorage
+      try {
+        const cs = sessionStorage.getItem('cache_sessions')
+        const cw = sessionStorage.getItem('cache_wellness')
+        if (cs) setSessions(JSON.parse(cs))
+        if (cw) setWellness(JSON.parse(cw))
+      } catch {}
+      setOffline(true)
+    }
     setBooting(false)
   }, [])
 
@@ -2011,14 +2118,17 @@ export default function App() {
   // Refresh user_data from Supabase when switching between Louis and Romain
   useEffect(() => {
     if (booting) return
-    supabase.from('user_data').select('*').eq('user_id', uid).then(({ data }) => {
-      if (data) {
-        setUserData(prev => ({
-          ...prev,
-          [uid]: Object.fromEntries(data.map(row => [row.key, row.value]))
-        }))
-      }
-    })
+    supabase.from('user_data').select('*').eq('user_id', uid)
+      .then(({ data, error }) => {
+        if (error) { console.error('Refresh user_data error:', error); return }
+        if (data) {
+          setUserData(prev => ({
+            ...prev,
+            [uid]: Object.fromEntries(data.map(row => [row.key, row.value]))
+          }))
+        }
+      })
+      .catch(e => console.error('Refresh user_data error:', e))
   }, [uid, booting])
 
   async function handleAnalyze(session, last) {
@@ -2042,6 +2152,7 @@ export default function App() {
   const titles = { home: null, session: 'Nouvelle séance', coach: 'Coach IA', history: 'Historique', plan: 'Plan', duel: 'Duel', profil: 'Profil' }
 
   return (
+    <ToastProvider>
     <div style={{ background: S.bg, minHeight: '100vh', fontFamily: '-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif', color: S.text }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2075,6 +2186,12 @@ export default function App() {
         </div>
       </div>
 
+      {offline && (
+        <div style={{ padding: '10px 16px', background: `${S.yellow}20`, borderBottom: `1px solid ${S.yellow}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: S.yellow }}>⚠️ Mode hors-ligne — données en cache</span>
+          <button onClick={load} style={{ fontSize: 12, color: S.yellow, background: 'none', border: `1px solid ${S.yellow}`, borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Réessayer</button>
+        </div>
+      )}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 110px' }}>
         {booting ? <div style={{ textAlign: 'center', padding: 60, color: S.textSec }}>Chargement...</div> : (
           <>
@@ -2109,5 +2226,6 @@ export default function App() {
         {analysis && <div style={{ fontSize: 14, lineHeight: 1.75, color: S.text, whiteSpace: 'pre-wrap' }}>{analysis}</div>}
       </Sheet>
     </div>
+    </ToastProvider>
   )
 }
