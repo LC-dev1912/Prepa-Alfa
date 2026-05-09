@@ -2009,6 +2009,19 @@ export default function App() {
 
   useEffect(() => { load() }, [load])
 
+  // Refresh user_data from Supabase when switching between Louis and Romain
+  useEffect(() => {
+    if (booting) return
+    supabase.from('user_data').select('*').eq('user_id', uid).then(({ data }) => {
+      if (data) {
+        setUserData(prev => ({
+          ...prev,
+          [uid]: Object.fromEntries(data.map(row => [row.key, row.value]))
+        }))
+      }
+    })
+  }, [uid, booting])
+
   async function handleAnalyze(session, last) {
     try {
       const msg = `Séance : ${session.discipline}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}, RPE ${session.rpe}/10.${session.notes ? ` Notes: ${session.notes}.` : ''}${last ? ` Dernière (${last.date}): ${last.duration}min, RPE ${last.rpe}/10.` : ''} Analyse en 4 lignes max.`
