@@ -1970,14 +1970,40 @@ export default function App() {
     ])
     setSessions(s || [])
     setWellness(w || [])
+
+    // Build userData map from Supabase rows
+    const byUser = {}
     if (ud) {
-      const byUser = {}
       ud.forEach(row => {
         if (!byUser[row.user_id]) byUser[row.user_id] = {}
         byUser[row.user_id][row.key] = row.value
       })
-      setUserData(byUser)
     }
+
+    // One-time migration: if localStorage has data that Supabase doesn't, push it up
+    const legacyKeys = ['shoes', 'hrMax', 'hrRest', 'vma', 'weights', 'simTarget', 'aiPlan', 'aiNutrition']
+    const migrateOps = []
+    for (const userId of Object.keys(USERS)) {
+      if (!byUser[userId]) byUser[userId] = {}
+      for (const key of legacyKeys) {
+        if (byUser[userId][key] !== undefined) continue // Already in Supabase, skip
+        const raw = localStorage.getItem(`${key}_${userId}`)
+        if (raw === null) continue
+        try {
+          const value = JSON.parse(raw)
+          byUser[userId][key] = value
+          migrateOps.push(
+            supabase.from('user_data').upsert(
+              { user_id: userId, key, value },
+              { onConflict: 'user_id,key' }
+            )
+          )
+        } catch {}
+      }
+    }
+    if (migrateOps.length > 0) await Promise.all(migrateOps)
+
+    setUserData(byUser)
     setBooting(false)
   }, [])
 
