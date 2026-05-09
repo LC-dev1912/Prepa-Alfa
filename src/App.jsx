@@ -175,10 +175,20 @@ ${aiNutrition.slice(0, 600)}${aiNutrition.length > 600 ? '\n[...]' : ''}` : ''}`
 }
 
 const S = {
-  bg: '#F2F2F7', card: '#FFFFFF', text: '#1C1C1E', textSec: '#8E8E93',
-  textTer: '#AEAEB2', border: '#E5E5EA', green: '#34C759', red: '#FF3B30', yellow: '#FF9500',
-  radius: 20, radiusSm: 12,
+  bg: '#111111',
+  card: 'rgba(255,255,255,0.055)',
+  text: '#FFFFFF',
+  textSec: 'rgba(255,255,255,0.50)',
+  textTer: 'rgba(255,255,255,0.28)',
+  border: 'rgba(255,255,255,0.08)',
+  green: '#10B981',
+  red: '#F04438',
+  yellow: '#F59E0B',
+  radius: 20,
+  radiusSm: 14,
 }
+
+const TOOLTIP_STYLE = { background: '#1C1C1C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 12, fontSize: 11, color: '#fff' }
 
 // ── Toast system ──
 const ToastContext = createContext(null)
@@ -194,9 +204,9 @@ function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={add}>
       {children}
-      <div style={{ position: 'fixed', top: 16, left: 0, right: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', top: 20, left: 0, right: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
         {toasts.map(t => (
-          <div key={t.id} style={{ padding: '10px 20px', borderRadius: 99, fontSize: 14, fontWeight: 600, color: '#fff', background: t.type === 'error' ? S.red : t.type === 'warning' ? S.yellow : S.green, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', maxWidth: 360, textAlign: 'center' }}>
+          <div key={t.id} style={{ padding: '11px 22px', borderRadius: 99, fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.02em', background: t.type === 'error' ? '#F04438' : t.type === 'warning' ? '#F59E0B' : '#10B981', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', maxWidth: 360, textAlign: 'center' }}>
             {t.msg}
           </div>
         ))}
@@ -205,7 +215,7 @@ function ToastProvider({ children }) {
   )
 }
 
-const discColor = (disc) => ({ Natation: '#007AFF', Vélo: '#FF9500', 'Course à pied': ORANGE, Musculation: '#AF52DE', Brick: '#FF3B30', Récupération: S.green })[disc] || S.textSec
+const discColor = (disc) => ({ Natation: '#38BDF8', Vélo: '#FB923C', 'Course à pied': '#FC4C02', Musculation: '#C084FC', Brick: '#F87171', Récupération: '#34D399' })[disc] || S.textSec
 
 const isPlanned = (session) => {
   if (!session?.notes) return false
@@ -213,21 +223,21 @@ const isPlanned = (session) => {
 }
 
 const Card = ({ children, style, onClick }) => (
-  <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '16px 18px', ...style, cursor: onClick ? 'pointer' : 'default' }}>{children}</div>
+  <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '18px 18px', border: `1px solid ${S.border}`, ...style, cursor: onClick ? 'pointer' : 'default' }}>{children}</div>
 )
 
 const Label = ({ children }) => (
-  <div style={{ fontSize: 12, fontWeight: 600, color: S.textSec, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>{children}</div>
+  <div style={{ fontSize: 10, fontWeight: 700, color: S.textTer, letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 12, fontFamily: '"Barlow Condensed", sans-serif' }}>{children}</div>
 )
 
-const PBar = ({ pct, color, h = 6 }) => (
-  <div style={{ height: h, background: S.bg, borderRadius: 99, overflow: 'hidden' }}>
-    <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.6s ease' }} />
+const PBar = ({ pct, color, h = 5 }) => (
+  <div style={{ height: h, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' }}>
+    <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
   </div>
 )
 
 const Avatar = ({ uid, size = 36 }) => (
-  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 800, flexShrink: 0 }}>{USERS[uid].avatar}</div>
+  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 800, flexShrink: 0, boxShadow: `0 0 0 2px rgba(0,0,0,0.3), 0 0 12px ${USERS[uid].accent}40` }}>{USERS[uid].avatar}</div>
 )
 
 const DiscIcon = ({ disc, size = 20, color }) => {
@@ -236,8 +246,8 @@ const DiscIcon = ({ disc, size = 20, color }) => {
 }
 
 const inputStyle = (extra = {}) => ({
-  width: '100%', padding: '12px 14px', fontSize: 15,
-  background: S.bg, border: `1px solid ${S.border}`, borderRadius: S.radiusSm,
+  width: '100%', padding: '13px 15px', fontSize: 15,
+  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: S.radiusSm,
   color: S.text, outline: 'none', fontFamily: 'inherit', ...extra,
 })
 
@@ -245,18 +255,18 @@ function Sheet({ open, onClose, children, title }) {
   if (!open) return null
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: S.card, borderRadius: '24px 24px 0 0', padding: '0 0 40px', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ width: 40, height: 4, background: S.border, borderRadius: 99, margin: '12px auto 0' }} />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#171717', borderRadius: '28px 28px 0 0', border: `1px solid ${S.border}`, borderBottom: 'none', padding: '0 0 44px', maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 99, margin: '14px auto 0' }} />
         {title && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px 0' }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: S.text }}>{title}</div>
-            <button onClick={onClose} style={{ background: S.bg, border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={16} color={S.textSec} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 0' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '-0.01em' }}>{title}</div>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={15} color={S.textSec} />
             </button>
           </div>
         )}
-        <div style={{ padding: '16px 20px 0' }}>{children}</div>
+        <div style={{ padding: '18px 20px 0' }}>{children}</div>
       </div>
     </div>
   )
@@ -288,23 +298,26 @@ function WellnessForm({ uid, wellness, onSave }) {
     setSaving(false)
   }
   return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: S.text }}>Check-in du matin</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: scoreColor }}>{score}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>%</span></div>
+    <Card style={{ background: `linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '-0.01em' }}>Check-in du matin</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+          <span style={{ fontSize: 32, fontWeight: 900, color: scoreColor, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{score}</span>
+          <span style={{ fontSize: 13, color: S.textSec, fontWeight: 500 }}>%</span>
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 18 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginBottom: 20 }}>
         {items.map(item => (
           <div key={item.key}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 14, color: S.text, fontWeight: 500 }}>{item.label}</span>
-              <span style={{ fontSize: 20 }}>{emojis[item.emKey][item.display - 1]}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: 14, color: S.textSec, fontWeight: 500 }}>{item.label}</span>
+              <span style={{ fontSize: 22 }}>{emojis[item.emKey][item.display - 1]}</span>
             </div>
             <input type="range" min="1" max="5" value={item.display} onChange={e => onChange(item.key, +e.target.value)} style={{ width: '100%', accentColor: USERS[uid].accent }} />
           </div>
         ))}
       </div>
-      <button onClick={save} disabled={saved || saving} style={{ width: '100%', padding: '14px', borderRadius: S.radiusSm, border: 'none', background: saved ? S.bg : USERS[uid].accent, color: saved ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: saved ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+      <button onClick={save} disabled={saved || saving} style={{ width: '100%', padding: '15px', borderRadius: S.radiusSm, border: 'none', background: saved ? 'rgba(255,255,255,0.06)' : USERS[uid].accent, color: saved ? S.textSec : '#fff', fontSize: 15, fontWeight: 700, cursor: saved ? 'default' : 'pointer', fontFamily: 'inherit', letterSpacing: '0.01em' }}>
         {saving ? 'Enregistrement...' : saved ? '✓ Check-in enregistré' : 'Enregistrer'}
       </button>
     </Card>
@@ -738,7 +751,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
           <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><MessageSquare size={18} color={USERS[uid].accent} /> Discuter de cette séance</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, maxHeight: 250, overflowY: 'auto' }}>
             {msgs.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? USERS[uid].accent : S.bg, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '10px 14px', fontSize: 14, lineHeight: 1.6 }}>{m.content}</div>
+              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? USERS[uid].accent : 'rgba(255,255,255,0.08)', color: S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', padding: '11px 15px', fontSize: 14, lineHeight: 1.65, border: m.role === 'user' ? 'none' : `1px solid ${S.border}` }}>{m.content}</div>
             ))}
             {sending && <div style={{ alignSelf: 'flex-start', padding: '10px 14px', background: S.bg, borderRadius: 16, fontSize: 13, color: S.textSec }}>⏳</div>}
             <div ref={bottomRef} />
@@ -1003,7 +1016,7 @@ function DuelPage({ sessions }) {
             <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
             <XAxis dataKey="week" tick={{ fontSize: 10, fill: S.textSec }} />
             <YAxis tick={{ fontSize: 10, fill: S.textSec }} />
-            <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v, n) => [`${v} ${unit}`, n]} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, n) => [`${v} ${unit}`, n]} />
             <Line type="monotone" dataKey="Louis" stroke={ORANGE} strokeWidth={2} dot={{ fill: ORANGE, r: 3 }} />
             <Line type="monotone" dataKey="Romain" stroke={BLUE} strokeWidth={2} dot={{ fill: BLUE, r: 3 }} />
           </LineChart>
@@ -1014,16 +1027,18 @@ function DuelPage({ sessions }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card style={{ background: `${USERS[leader].accent}12`, border: `1.5px solid ${USERS[leader].accent}33` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Trophy size={32} color={USERS[leader].accent} />
+      <Card style={{ background: `linear-gradient(145deg, ${USERS[leader].accent}20, ${USERS[leader].accent}08)`, border: `1px solid ${USERS[leader].accent}35`, padding: '20px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 52, height: 52, background: `${USERS[leader].accent}22`, border: `1px solid ${USERS[leader].accent}40`, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Trophy size={26} color={USERS[leader].accent} />
+          </div>
           <div>
-            <div style={{ fontSize: 13, color: S.textSec, fontWeight: 500 }}>En tête cette semaine</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: USERS[leader].accent }}>{USERS[leader].name}</div>
+            <div style={{ fontSize: 10, color: USERS[leader].accent, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', opacity: 0.75, fontFamily: '"Barlow Condensed", sans-serif' }}>En tête cette semaine</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: USERS[leader].accent, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '-0.02em', lineHeight: 1.1 }}>{USERS[leader].name}</div>
           </div>
           <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-            <div style={{ fontSize: 24, fontWeight: 900, color: USERS[leader].accent }}>{Math.max(lTotal, rTotal)}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>/500</span></div>
-            <div style={{ fontSize: 11, color: S.textSec }}>score total</div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: USERS[leader].accent, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.max(lTotal, rTotal)}</div>
+            <div style={{ fontSize: 10, color: S.textTer, letterSpacing: '0.06em' }}>/ 500 pts</div>
           </div>
         </div>
       </Card>
@@ -1036,7 +1051,7 @@ function DuelPage({ sessions }) {
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
             <Radar name="Louis" dataKey="Louis" stroke={ORANGE} fill={ORANGE} fillOpacity={0.15} strokeWidth={2} />
             <Radar name="Romain" dataKey="Romain" stroke={BLUE} fill={BLUE} fillOpacity={0.15} strokeWidth={2} />
-            <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 12 }} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} />
           </RadarChart>
         </ResponsiveContainer>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8 }}>
@@ -1226,14 +1241,14 @@ function ChatPage({ uid, sessions, wellness, userData }) {
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
             {m.role === 'assistant' && <div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>🤖</div>}
             {m.role === 'user' && <Avatar uid={uid} size={30} />}
-            <div style={{ maxWidth: '80%', padding: '12px 16px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', background: m.role === 'user' ? USERS[uid].accent : S.card, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>{m.content}</div>
+            <div style={{ maxWidth: '80%', padding: '12px 16px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', background: m.role === 'user' ? USERS[uid].accent : 'rgba(255,255,255,0.07)', color: S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', border: m.role === 'user' ? 'none' : `1px solid ${S.border}` }}>{m.content}</div>
           </div>
         ))}
         {loading && <div style={{ display: 'flex', gap: 10 }}><div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div><div style={{ padding: '12px 16px', background: S.card, borderRadius: '18px 18px 18px 4px', display: 'flex', gap: 5 }}>{[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: S.textTer, animation: `pulse 1.4s ${i * 0.18}s ease-in-out infinite` }} />)}</div></div>}
         <div ref={bottomRef} />
       </div>
       {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, flexShrink: 0 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}</div>}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: S.card, borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', border: `1px solid ${S.border}`, borderRadius: 18, flexShrink: 0 }}>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()} placeholder="Message..." style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 15, color: S.text, outline: 'none', fontFamily: 'inherit' }} />
         <button onClick={() => send()} disabled={loading || !input.trim()} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', flexShrink: 0, background: !input.trim() || loading ? S.bg : USERS[uid].accent, color: !input.trim() || loading ? S.textSec : '#fff', cursor: !input.trim() || loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>↑</button>
       </div>
@@ -1316,10 +1331,10 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card style={{ background: S.text, padding: '20px 20px' }}>
-        <div style={{ fontSize: 13, color: '#8E8E93', fontWeight: 500, marginBottom: 4 }}>Triathlon Sprint · Décembre 2026</div>
-        <div style={{ fontSize: 36, fontWeight: 900, color: USERS[uid].accent, letterSpacing: -1 }}>J-{daysLeft()}</div>
-        <div style={{ fontSize: 13, color: '#8E8E93', marginTop: 4 }}>750m · 20km · 5km</div>
+      <Card style={{ background: `linear-gradient(145deg, ${USERS[uid].accent}18 0%, rgba(255,255,255,0.03) 100%)`, border: `1px solid ${USERS[uid].accent}28`, padding: '24px 22px' }}>
+        <div style={{ fontSize: 11, color: USERS[uid].accent, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 6, opacity: 0.8, fontFamily: '"Barlow Condensed", sans-serif' }}>Triathlon Sprint · Décembre 2026</div>
+        <div style={{ fontSize: 72, fontWeight: 900, color: USERS[uid].accent, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>J-{daysLeft()}</div>
+        <div style={{ fontSize: 13, color: S.textSec, marginTop: 8 }}>750m natation · 20km vélo · 5km course</div>
       </Card>
 
       {/* Calendrier 2 semaines */}
@@ -1724,22 +1739,22 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
       {/* ── Streaks & Badges ── */}
       <Card>
         <Label>Série & badges</Label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-          <div style={{ background: currentStreak >= 7 ? `${ORANGE}12` : S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center', border: currentStreak >= 7 ? `1px solid ${ORANGE}33` : 'none' }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: currentStreak >= 3 ? ORANGE : S.text }}>{currentStreak}j</div>
-            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>série actuelle</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
+          <div style={{ background: currentStreak >= 7 ? `${ORANGE}18` : 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: currentStreak >= 7 ? `1px solid ${ORANGE}35` : `1px solid ${S.border}` }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: currentStreak >= 3 ? ORANGE : S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{currentStreak}j</div>
+            <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>série actuelle</div>
           </div>
-          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: S.text }}>{bestStreak}j</div>
-            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>meilleur streak</div>
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{bestStreak}j</div>
+            <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>meilleur streak</div>
           </div>
         </div>
-        <div style={{ fontSize: 11, color: S.textSec, marginBottom: 10 }}>{earnedCount}/{badges.length} badges débloqués</div>
+        <div style={{ fontSize: 11, color: S.textTer, marginBottom: 12, letterSpacing: '0.04em' }}>{earnedCount}/{badges.length} badges débloqués</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {badges.map(b => (
-            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 74, padding: '10px 6px', borderRadius: 12, background: b.earned ? `${USERS[uid].accent}15` : S.bg, border: `1.5px solid ${b.earned ? USERS[uid].accent : S.border}`, opacity: b.earned ? 1 : 0.4, transition: 'opacity 0.2s' }}>
-              <div style={{ fontSize: 22 }}>{b.icon}</div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: b.earned ? USERS[uid].accent : S.textSec, marginTop: 5, textAlign: 'center', lineHeight: 1.3 }}>{b.label}</div>
+            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 74, padding: '12px 6px', borderRadius: 14, background: b.earned ? `${USERS[uid].accent}18` : 'rgba(255,255,255,0.03)', border: `1px solid ${b.earned ? USERS[uid].accent + '40' : S.border}`, opacity: b.earned ? 1 : 0.35, transition: 'all 0.2s' }}>
+              <div style={{ fontSize: 24 }}>{b.icon}</div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: b.earned ? USERS[uid].accent : S.textTer, marginTop: 6, textAlign: 'center', lineHeight: 1.3, letterSpacing: '0.02em' }}>{b.label}</div>
             </div>
           ))}
         </div>
@@ -1748,19 +1763,19 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
       {/* ── Global stats ── */}
       <Card>
         <Label>Statistiques globales</Label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: USERS[uid].accent }}>{userSessions.length}</div>
-            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>séances totales</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ background: `${USERS[uid].accent}14`, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${USERS[uid].accent}25` }}>
+            <div style={{ fontSize: 40, fontWeight: 900, color: USERS[uid].accent, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{userSessions.length}</div>
+            <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>séances totales</div>
           </div>
-          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: USERS[uid].accent }}>{Math.round(totalMin / 60 * 10) / 10}h</div>
-            <div style={{ fontSize: 11, color: S.textSec, marginTop: 4 }}>d'entraînement</div>
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
+            <div style={{ fontSize: 40, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.round(totalMin / 60 * 10) / 10}h</div>
+            <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>d'entraînement</div>
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {discStats.map(ds => (
-            <div key={ds.disc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: S.bg, borderRadius: S.radiusSm }}>
+            <div key={ds.disc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, border: `1px solid ${S.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <DiscIcon disc={ds.disc} size={18} color={discColor(ds.disc)} />
                 <div>
@@ -1786,7 +1801,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
               <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
               <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} interval={2} />
               <YAxis tick={{ fontSize: 9, fill: S.textSec }} width={30} />
-              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={(v, n) => [`${v} min`, n]} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, n) => [`${v} min`, n]} />
               <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
               <Line type="monotone" dataKey="Course" name="Course à pied" stroke={ORANGE} strokeWidth={2} dot={false} connectNulls />
               <Line type="monotone" dataKey="Vélo" name="Vélo" stroke="#FF9500" strokeWidth={2} dot={false} connectNulls />
@@ -1805,7 +1820,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
               <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} interval={2} />
               <YAxis yAxisId="km" tick={{ fontSize: 9, fill: S.textSec }} width={30} />
               <YAxis yAxisId="m" orientation="right" tick={{ fontSize: 9, fill: S.textSec }} width={30} />
-              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={(v, n) => [n === 'Natation (m)' ? `${v} m` : `${v} km`, n]} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v, n) => [n === 'Natation (m)' ? `${v} m` : `${v} km`, n]} />
               <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
               <Line yAxisId="km" type="monotone" dataKey="CourseKm" name="Course (km)" stroke={ORANGE} strokeWidth={2} dot={false} connectNulls />
               <Line yAxisId="km" type="monotone" dataKey="VéloKm" name="Vélo (km)" stroke="#FF9500" strokeWidth={2} dot={false} connectNulls />
@@ -1823,7 +1838,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
               <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
               <XAxis dataKey="week" tick={{ fontSize: 9, fill: S.textSec }} />
               <YAxis tick={{ fontSize: 9, fill: S.textSec }} domain={[0, 10]} width={22} ticks={[0, 2, 4, 6, 8, 10]} />
-              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={v => [v ?? '—', 'RPE moyen']} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [v ?? '—', 'RPE moyen']} />
               <Bar dataKey="rpe" name="RPE moyen" fill={USERS[uid].accent} radius={[4, 4, 0, 0]} maxBarSize={32} />
             </BarChart>
           </ResponsiveContainer>
@@ -1842,7 +1857,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
               <CartesianGrid strokeDasharray="3 3" stroke={S.border} />
               <XAxis dataKey="date" tick={{ fontSize: 9, fill: S.textSec }} tickFormatter={d => d.slice(5)} />
               <YAxis tick={{ fontSize: 9, fill: S.textSec }} domain={['auto', 'auto']} width={32} />
-              <Tooltip contentStyle={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, fontSize: 11 }} formatter={v => [`${v} kg`, 'Poids']} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`${v} kg`, 'Poids']} />
               <Line type="monotone" dataKey="weight" stroke={USERS[uid].accent} strokeWidth={2} dot={{ fill: USERS[uid].accent, r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -1973,19 +1988,19 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
         {[
           { Icon: Calendar, val: week.length, label: 'Séances', color: USERS[uid].accent },
           { Icon: Clock, val: `${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')}`, label: 'Volume', color: S.text },
-          { Icon: Heart, val: wellScore !== null ? `${wellScore}%` : '—', label: 'Bien-être', color: wellScore ? scoreColor : S.textSec },
-        ].map((s, i) => (
-          <Card key={i} style={{ padding: '14px 10px', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}><s.Icon size={18} color={s.color} /></div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: s.color, letterSpacing: -0.5 }}>{s.val}</div>
-            <div style={{ fontSize: 10, color: S.textSec, marginTop: 3, fontWeight: 500 }}>{s.label}</div>
+          { Icon: Heart, val: wellScore !== null ? `${wellScore}%` : '—', label: 'Bien-être', color: wellScore ? scoreColor : S.textTer },
+        ].map((item, i) => (
+          <Card key={i} style={{ padding: '16px 10px', textAlign: 'center', background: i === 0 ? `linear-gradient(145deg, ${USERS[uid].accent}20, ${USERS[uid].accent}08)` : S.card, border: i === 0 ? `1px solid ${USERS[uid].accent}30` : `1px solid ${S.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><item.Icon size={16} color={item.color} strokeWidth={2} /></div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: item.color, letterSpacing: '-0.03em', lineHeight: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>{item.val}</div>
+            <div style={{ fontSize: 9, color: S.textTer, marginTop: 5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{item.label}</div>
           </Card>
         ))}
       </div>
       {formRec && (
-        <div style={{ padding: '13px 16px', borderRadius: S.radius, background: formRec.bg, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 18px', borderRadius: S.radius, background: `${formRec.c}12`, border: `1px solid ${formRec.c}25`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: formRec.c }}>{formRec.txt}</span>
-          <span style={{ fontSize: 12, color: formRec.c, fontWeight: 600 }}>{formPct}%</span>
+          <span style={{ fontSize: 16, fontWeight: 900, color: formRec.c, fontFamily: '"Barlow Condensed", sans-serif' }}>{formPct}%</span>
         </div>
       )}
       {(volAlert || rpeAlert) && (
@@ -2153,33 +2168,37 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: '-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif', color: S.text }}>
+    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: '"Barlow", -apple-system, "Helvetica Neue", sans-serif', color: S.text }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 0; }
         @keyframes pulse { 0%,60%,100% { opacity:0.3; transform:scale(0.8) } 30% { opacity:1; transform:scale(1) } }
         button { -webkit-tap-highlight-color: transparent; }
-        input:focus, textarea:focus, select:focus { border-color: #C7C7CC !important; }
+        input, textarea, select { color-scheme: dark; }
+        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.25); }
+        input:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,0.28) !important; outline: none; }
+        select option { background: #1C1C1C; color: #fff; }
+        input[type=range] { height: 4px; }
       `}</style>
 
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(242,242,247,0.92)', backdropFilter: 'blur(20px) saturate(180%)', borderBottom: `1px solid ${S.border}` }}>
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(17,17,17,0.90)', backdropFilter: 'blur(28px) saturate(180%)', borderBottom: `1px solid ${S.border}` }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '13px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             {tab === 'home' ? (
               <>
-                <div style={{ fontSize: 13, color: S.textSec, fontWeight: 500 }}>Bonjour,</div>
-                <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5 }}>{USERS[uid].name} 👋</div>
+                <div style={{ fontSize: 12, color: S.textTer, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: '"Barlow Condensed", sans-serif' }}>Bonjour</div>
+                <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-0.03em', color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1.1 }}>{USERS[uid].name}</div>
               </>
-            ) : <div style={{ fontSize: 20, fontWeight: 700 }}>{titles[tab]}</div>}
+            ) : <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', fontFamily: '"Barlow Condensed", sans-serif' }}>{titles[tab]}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ background: S.text, borderRadius: 10, padding: '5px 11px', textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: USERS[uid].accent, lineHeight: 1 }}>J‑{daysLeft()}</div>
-              <div style={{ fontSize: 9, color: '#8E8E93', letterSpacing: '0.06em' }}>COURSE</div>
+            <div style={{ background: `${USERS[uid].accent}18`, border: `1px solid ${USERS[uid].accent}30`, borderRadius: 12, padding: '6px 14px', textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: USERS[uid].accent, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: '"Barlow Condensed", sans-serif' }}>J‑{daysLeft()}</div>
+              <div style={{ fontSize: 8, color: USERS[uid].accent, letterSpacing: '0.10em', fontWeight: 700, opacity: 0.65, marginTop: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>COURSE</div>
             </div>
-            <div style={{ display: 'flex', background: S.border, borderRadius: 99, padding: 3, gap: 2 }}>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', border: `1px solid ${S.border}`, borderRadius: 99, padding: 3, gap: 2 }}>
               {['louis','romain'].map(u => (
-                <button key={u} onClick={() => setUid(u)} style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: uid === u ? USERS[u].accent : 'transparent', color: uid === u ? '#fff' : S.textSec, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>{USERS[u].avatar}</button>
+                <button key={u} onClick={() => setUid(u)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: uid === u ? USERS[u].accent : 'transparent', color: uid === u ? '#fff' : S.textTer, fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>{USERS[u].avatar}</button>
               ))}
             </div>
           </div>
@@ -2187,9 +2206,10 @@ export default function App() {
       </div>
 
       {offline && (
-        <div style={{ padding: '10px 16px', background: `${S.yellow}20`, borderBottom: `1px solid ${S.yellow}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: S.yellow }}>⚠️ Mode hors-ligne — données en cache</span>
-          <button onClick={load} style={{ fontSize: 12, color: S.yellow, background: 'none', border: `1px solid ${S.yellow}`, borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Réessayer</button>
+        <div style={{ padding: '10px 18px', background: `${S.yellow}15`, borderBottom: `1px solid ${S.yellow}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <AlertTriangle size={14} color={S.yellow} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: S.yellow, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.02em' }}>Mode hors-ligne — données en cache</span>
+          <button onClick={load} style={{ fontSize: 11, color: S.yellow, background: 'none', border: `1px solid ${S.yellow}50`, borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>Réessayer</button>
         </div>
       )}
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 110px' }}>
@@ -2206,17 +2226,22 @@ export default function App() {
         )}
       </div>
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(242,242,247,0.95)', backdropFilter: 'blur(20px) saturate(180%)', borderTop: `1px solid ${S.border}`, display: 'flex', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(10,10,10,0.93)', backdropFilter: 'blur(28px) saturate(180%)', borderTop: `1px solid ${S.border}`, display: 'flex', paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         {tabs.map(t => {
           const active = tab === t.id
           return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '10px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: active ? USERS[uid].accent : S.textTer, transition: 'color 0.12s' }}>
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '10px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: active ? USERS[uid].accent : S.textTer, transition: 'color 0.15s', position: 'relative' }}>
               {t.id === 'session' ? (
-                <div style={{ width: 32, height: 32, background: active ? USERS[uid].accent : S.textTer, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
-                  <Plus size={18} color="#fff" />
+                <div style={{ width: 38, height: 38, background: active ? USERS[uid].accent : `${USERS[uid].accent}22`, border: `1.5px solid ${active ? 'transparent' : `${USERS[uid].accent}45`}`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 1, boxShadow: active ? `0 0 16px ${USERS[uid].accent}50` : 'none' }}>
+                  <Plus size={19} color={active ? '#fff' : USERS[uid].accent} />
                 </div>
-              ) : <t.Icon size={22} color={active ? USERS[uid].accent : S.textTer} />}
-              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400 }}>{t.label}</span>
+              ) : (
+                <>
+                  <t.Icon size={21} color={active ? USERS[uid].accent : S.textTer} strokeWidth={active ? 2.2 : 1.5} />
+                  {active && <div style={{ position: 'absolute', top: 6, width: 4, height: 4, borderRadius: '50%', background: USERS[uid].accent, boxShadow: `0 0 6px ${USERS[uid].accent}` }} />}
+                </>
+              )}
+              <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, letterSpacing: active ? '0.02em' : 0 }}>{t.label}</span>
             </button>
           )
         })}
