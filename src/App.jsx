@@ -175,20 +175,22 @@ ${aiNutrition.slice(0, 600)}${aiNutrition.length > 600 ? '\n[...]' : ''}` : ''}`
 }
 
 const S = {
-  bg: '#111111',
-  card: 'rgba(255,255,255,0.055)',
-  text: '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.50)',
-  textTer: 'rgba(255,255,255,0.28)',
-  border: 'rgba(255,255,255,0.08)',
-  green: '#10B981',
-  red: '#F04438',
-  yellow: '#F59E0B',
-  radius: 20,
-  radiusSm: 14,
+  bg: '#F2F2F7',
+  card: '#FFFFFF',
+  text: '#1C1C1E',
+  textSec: '#636366',
+  textTer: '#AEAEB2',
+  border: '#E5E5EA',
+  green: '#34C759',
+  red: '#FF3B30',
+  yellow: '#FF9500',
+  radius: 16,
+  radiusSm: 12,
+  shadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+  shadowMd: '0 4px 20px rgba(0,0,0,0.10)',
 }
 
-const TOOLTIP_STYLE = { background: '#1C1C1C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 12, fontSize: 11, color: '#fff' }
+const TOOLTIP_STYLE = { background: '#FFFFFF', border: '1px solid #E5E5EA', borderRadius: 10, fontSize: 11, color: '#1C1C1E', boxShadow: '0 4px 12px rgba(0,0,0,0.10)' }
 
 // ── Toast system ──
 const ToastContext = createContext(null)
@@ -206,7 +208,7 @@ function ToastProvider({ children }) {
       {children}
       <div style={{ position: 'fixed', top: 20, left: 0, right: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
         {toasts.map(t => (
-          <div key={t.id} style={{ padding: '11px 22px', borderRadius: 99, fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.02em', background: t.type === 'error' ? '#F04438' : t.type === 'warning' ? '#F59E0B' : '#10B981', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', maxWidth: 360, textAlign: 'center' }}>
+          <div key={t.id} style={{ padding: '11px 22px', borderRadius: 99, fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '0.02em', background: t.type === 'error' ? '#FF3B30' : t.type === 'warning' ? '#FF9500' : '#34C759', boxShadow: '0 4px 20px rgba(0,0,0,0.18)', maxWidth: 360, textAlign: 'center' }}>
             {t.msg}
           </div>
         ))}
@@ -215,7 +217,7 @@ function ToastProvider({ children }) {
   )
 }
 
-const discColor = (disc) => ({ Natation: '#38BDF8', Vélo: '#FB923C', 'Course à pied': '#FC4C02', Musculation: '#C084FC', Brick: '#F87171', Récupération: '#34D399' })[disc] || S.textSec
+const discColor = (disc) => ({ Natation: '#007AFF', Vélo: '#FF9500', 'Course à pied': '#FC4C02', Musculation: '#AF52DE', Brick: '#FF3B30', Récupération: '#34C759' })[disc] || S.textSec
 
 const isPlanned = (session) => {
   if (!session?.notes) return false
@@ -223,7 +225,7 @@ const isPlanned = (session) => {
 }
 
 const Card = ({ children, style, onClick }) => (
-  <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '18px 18px', border: `1px solid ${S.border}`, ...style, cursor: onClick ? 'pointer' : 'default' }}>{children}</div>
+  <div onClick={onClick} style={{ background: S.card, borderRadius: S.radius, padding: '18px 18px', boxShadow: S.shadow, ...style, cursor: onClick ? 'pointer' : 'default', transition: onClick ? 'box-shadow 0.15s, transform 0.1s' : undefined }}>{children}</div>
 )
 
 const Label = ({ children }) => (
@@ -231,13 +233,13 @@ const Label = ({ children }) => (
 )
 
 const PBar = ({ pct, color, h = 5 }) => (
-  <div style={{ height: h, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' }}>
-    <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
+  <div style={{ height: h, background: S.bg, borderRadius: 99, overflow: 'hidden' }}>
+    <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)' }} />
   </div>
 )
 
 const Avatar = ({ uid, size = 36 }) => (
-  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 800, flexShrink: 0, boxShadow: `0 0 0 2px rgba(0,0,0,0.3), 0 0 12px ${USERS[uid].accent}40` }}>{USERS[uid].avatar}</div>
+  <div style={{ width: size, height: size, borderRadius: '50%', background: USERS[uid].accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 800, flexShrink: 0, boxShadow: `0 0 0 2.5px #FFFFFF, 0 2px 8px rgba(0,0,0,0.14)` }}>{USERS[uid].avatar}</div>
 )
 
 const DiscIcon = ({ disc, size = 20, color }) => {
@@ -247,21 +249,21 @@ const DiscIcon = ({ disc, size = 20, color }) => {
 
 const inputStyle = (extra = {}) => ({
   width: '100%', padding: '13px 15px', fontSize: 15,
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: S.radiusSm,
-  color: S.text, outline: 'none', fontFamily: 'inherit', ...extra,
+  background: S.bg, border: `1px solid ${S.border}`, borderRadius: S.radiusSm,
+  color: S.text, outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s', ...extra,
 })
 
 function Sheet({ open, onClose, children, title }) {
   if (!open) return null
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#171717', borderRadius: '28px 28px 0 0', border: `1px solid ${S.border}`, borderBottom: 'none', padding: '0 0 44px', maxHeight: '92vh', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 99, margin: '14px auto 0' }} />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.40)', backdropFilter: 'blur(6px)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#FFFFFF', borderRadius: '28px 28px 0 0', boxShadow: '0 -8px 40px rgba(0,0,0,0.12)', padding: '0 0 44px', maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, background: '#D1D1D6', borderRadius: 99, margin: '14px auto 0' }} />
         {title && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 0' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '-0.01em' }}>{title}</div>
-            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button onClick={onClose} style={{ background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <X size={15} color={S.textSec} />
             </button>
           </div>
@@ -298,7 +300,7 @@ function WellnessForm({ uid, wellness, onSave }) {
     setSaving(false)
   }
   return (
-    <Card style={{ background: `linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)` }}>
+    <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', letterSpacing: '-0.01em' }}>Check-in du matin</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
@@ -751,7 +753,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
           <div style={{ fontSize: 15, fontWeight: 700, color: S.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><MessageSquare size={18} color={USERS[uid].accent} /> Discuter de cette séance</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, maxHeight: 250, overflowY: 'auto' }}>
             {msgs.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? USERS[uid].accent : 'rgba(255,255,255,0.08)', color: S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', padding: '11px 15px', fontSize: 14, lineHeight: 1.65, border: m.role === 'user' ? 'none' : `1px solid ${S.border}` }}>{m.content}</div>
+              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? USERS[uid].accent : S.bg, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', padding: '11px 15px', fontSize: 14, lineHeight: 1.65 }}>{m.content}</div>
             ))}
             {sending && <div style={{ alignSelf: 'flex-start', padding: '10px 14px', background: S.bg, borderRadius: 16, fontSize: 13, color: S.textSec }}>⏳</div>}
             <div ref={bottomRef} />
@@ -1027,9 +1029,9 @@ function DuelPage({ sessions }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card style={{ background: `linear-gradient(145deg, ${USERS[leader].accent}20, ${USERS[leader].accent}08)`, border: `1px solid ${USERS[leader].accent}35`, padding: '20px 20px' }}>
+      <Card style={{ background: `linear-gradient(145deg, ${USERS[leader].accent}12, ${USERS[leader].accent}04)`, border: `1px solid ${USERS[leader].accent}28`, padding: '20px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 52, height: 52, background: `${USERS[leader].accent}22`, border: `1px solid ${USERS[leader].accent}40`, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: 52, height: 52, background: `${USERS[leader].accent}14`, border: `1px solid ${USERS[leader].accent}28`, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Trophy size={26} color={USERS[leader].accent} />
           </div>
           <div>
@@ -1038,7 +1040,7 @@ function DuelPage({ sessions }) {
           </div>
           <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
             <div style={{ fontSize: 36, fontWeight: 900, color: USERS[leader].accent, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.max(lTotal, rTotal)}</div>
-            <div style={{ fontSize: 10, color: S.textTer, letterSpacing: '0.06em' }}>/ 500 pts</div>
+            <div style={{ fontSize: 10, color: S.textSec, letterSpacing: '0.06em' }}>/ 500 pts</div>
           </div>
         </div>
       </Card>
@@ -1214,7 +1216,7 @@ function ChatPage({ uid, sessions, wellness, userData }) {
             <div style={{ padding: '12px 18px 4px' }}><Label>Conversations récentes</Label></div>
             {convList.map((c, i) => (
               <div key={c.id} onClick={() => openConv(c)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderBottom: i < convList.length - 1 ? `1px solid ${S.border}` : 'none', cursor: 'pointer' }}>
-                <div style={{ width: 36, height: 36, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>🤖</div>
+                <div style={{ width: 36, height: 36, background: '#F2F2F7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>🤖</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: S.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title || 'Conversation'}</div>
                   <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{fmtDate(c.updated_at)}</div>
@@ -1234,21 +1236,21 @@ function ChatPage({ uid, sessions, wellness, userData }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100svh - 160px)', minHeight: 400 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
         <button onClick={() => setView('list')} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: USERS[uid].accent, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, padding: 0 }}>← Conversations</button>
-        <button onClick={startNewConv} style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '6px 12px', borderRadius: 99, fontWeight: 600 }}><Plus size={13} /> Nouveau</button>
+        <button onClick={startNewConv} style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${S.border}`, background: S.bg, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: '6px 12px', borderRadius: 99, fontWeight: 600, transition: 'background 0.15s' }}><Plus size={13} /> Nouveau</button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 12 }}>
         {msgs.map((m, i) => (
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-            {m.role === 'assistant' && <div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>🤖</div>}
+            {m.role === 'assistant' && <div style={{ width: 30, height: 30, background: '#F2F2F7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>🤖</div>}
             {m.role === 'user' && <Avatar uid={uid} size={30} />}
-            <div style={{ maxWidth: '80%', padding: '12px 16px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', background: m.role === 'user' ? USERS[uid].accent : 'rgba(255,255,255,0.07)', color: S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', border: m.role === 'user' ? 'none' : `1px solid ${S.border}` }}>{m.content}</div>
+            <div style={{ maxWidth: '80%', padding: '12px 16px', fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', background: m.role === 'user' ? USERS[uid].accent : S.bg, color: m.role === 'user' ? '#fff' : S.text, borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px' }}>{m.content}</div>
           </div>
         ))}
-        {loading && <div style={{ display: 'flex', gap: 10 }}><div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div><div style={{ padding: '12px 16px', background: S.card, borderRadius: '18px 18px 18px 4px', display: 'flex', gap: 5 }}>{[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: S.textTer, animation: `pulse 1.4s ${i * 0.18}s ease-in-out infinite` }} />)}</div></div>}
+        {loading && <div style={{ display: 'flex', gap: 10 }}><div style={{ width: 30, height: 30, background: S.bg, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div><div style={{ padding: '12px 16px', background: S.bg, borderRadius: '18px 18px 18px 4px', display: 'flex', gap: 5, alignItems: 'center' }}>{[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: S.textTer, animation: `pulse 1.4s ${i * 0.18}s ease-in-out infinite` }} />)}</div></div>}
         <div ref={bottomRef} />
       </div>
-      {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, flexShrink: 0 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}</div>}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', border: `1px solid ${S.border}`, borderRadius: 18, flexShrink: 0 }}>
+      {msgs.length === 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, flexShrink: 0 }}>{suggestions.map(s => <button key={s} onClick={() => send(s)} style={{ padding: '8px 14px', borderRadius: 99, border: `1px solid ${S.border}`, background: S.card, color: S.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.15s' }}>{s}</button>)}</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', background: S.bg, border: `1px solid ${S.border}`, borderRadius: 18, flexShrink: 0 }}>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()} placeholder="Message..." style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 15, color: S.text, outline: 'none', fontFamily: 'inherit' }} />
         <button onClick={() => send()} disabled={loading || !input.trim()} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', flexShrink: 0, background: !input.trim() || loading ? S.bg : USERS[uid].accent, color: !input.trim() || loading ? S.textSec : '#fff', cursor: !input.trim() || loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>↑</button>
       </div>
@@ -1331,10 +1333,10 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card style={{ background: `linear-gradient(145deg, ${USERS[uid].accent}18 0%, rgba(255,255,255,0.03) 100%)`, border: `1px solid ${USERS[uid].accent}28`, padding: '24px 22px' }}>
+      <Card style={{ background: `linear-gradient(145deg, ${USERS[uid].accent}10 0%, #FFFFFF 100%)`, border: `1px solid ${USERS[uid].accent}22`, padding: '24px 22px' }}>
         <div style={{ fontSize: 11, color: USERS[uid].accent, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 6, opacity: 0.8, fontFamily: '"Barlow Condensed", sans-serif' }}>Triathlon Sprint · Décembre 2026</div>
         <div style={{ fontSize: 72, fontWeight: 900, color: USERS[uid].accent, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>J-{daysLeft()}</div>
-        <div style={{ fontSize: 13, color: S.textSec, marginTop: 8 }}>750m natation · 20km vélo · 5km course</div>
+        <div style={{ fontSize: 13, color: S.textSec, marginTop: 8, fontWeight: 500 }}>750m natation · 20km vélo · 5km course</div>
       </Card>
 
       {/* Calendrier 2 semaines */}
@@ -1439,7 +1441,7 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
           <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2, background: S.border, borderRadius: 99 }} />
           {PLAN[uid].map((p, i) => (
             <div key={p.phase} style={{ position: 'relative', paddingBottom: i < PLAN[uid].length - 1 ? 20 : 0 }}>
-              <div style={{ position: 'absolute', left: -20, top: 2, width: 12, height: 12, borderRadius: '50%', background: p.color, border: `3px solid ${S.card}` }} />
+              <div style={{ position: 'absolute', left: -20, top: 2, width: 12, height: 12, borderRadius: '50%', background: p.color, border: '3px solid #FFFFFF', boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' }} />
               <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{p.phase}</div>
               <div style={{ fontSize: 12, color: p.color, fontWeight: 600, marginTop: 2 }}>{p.period}</div>
               <div style={{ fontSize: 13, color: S.textSec, marginTop: 4, lineHeight: 1.5 }}>{p.detail}</div>
@@ -1740,11 +1742,11 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
       <Card>
         <Label>Série & badges</Label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
-          <div style={{ background: currentStreak >= 7 ? `${ORANGE}18` : 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: currentStreak >= 7 ? `1px solid ${ORANGE}35` : `1px solid ${S.border}` }}>
+          <div style={{ background: currentStreak >= 7 ? `${ORANGE}12` : S.bg, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${currentStreak >= 7 ? ORANGE + '30' : S.border}` }}>
             <div style={{ fontSize: 36, fontWeight: 900, color: currentStreak >= 3 ? ORANGE : S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{currentStreak}j</div>
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>série actuelle</div>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
             <div style={{ fontSize: 36, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{bestStreak}j</div>
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>meilleur streak</div>
           </div>
@@ -1752,7 +1754,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
         <div style={{ fontSize: 11, color: S.textTer, marginBottom: 12, letterSpacing: '0.04em' }}>{earnedCount}/{badges.length} badges débloqués</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {badges.map(b => (
-            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 74, padding: '12px 6px', borderRadius: 14, background: b.earned ? `${USERS[uid].accent}18` : 'rgba(255,255,255,0.03)', border: `1px solid ${b.earned ? USERS[uid].accent + '40' : S.border}`, opacity: b.earned ? 1 : 0.35, transition: 'all 0.2s' }}>
+            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 74, padding: '12px 6px', borderRadius: 14, background: b.earned ? `${USERS[uid].accent}12` : S.bg, border: `1px solid ${b.earned ? USERS[uid].accent + '35' : S.border}`, opacity: b.earned ? 1 : 0.40, transition: 'all 0.2s' }}>
               <div style={{ fontSize: 24 }}>{b.icon}</div>
               <div style={{ fontSize: 9, fontWeight: 700, color: b.earned ? USERS[uid].accent : S.textTer, marginTop: 6, textAlign: 'center', lineHeight: 1.3, letterSpacing: '0.02em' }}>{b.label}</div>
             </div>
@@ -1764,18 +1766,18 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
       <Card>
         <Label>Statistiques globales</Label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-          <div style={{ background: `${USERS[uid].accent}14`, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${USERS[uid].accent}25` }}>
+          <div style={{ background: `${USERS[uid].accent}10`, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${USERS[uid].accent}22` }}>
             <div style={{ fontSize: 40, fontWeight: 900, color: USERS[uid].accent, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{userSessions.length}</div>
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>séances totales</div>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
+          <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
             <div style={{ fontSize: 40, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.round(totalMin / 60 * 10) / 10}h</div>
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>d'entraînement</div>
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {discStats.map(ds => (
-            <div key={ds.disc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: S.radiusSm, border: `1px solid ${S.border}` }}>
+            <div key={ds.disc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <DiscIcon disc={ds.disc} size={18} color={discColor(ds.disc)} />
                 <div>
@@ -1928,7 +1930,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
           </div>
         </div>
         {hrMax && !hrRest && (
-          <div style={{ fontSize: 11, color: S.textSec, marginBottom: 10, padding: '8px 12px', background: S.bg, borderRadius: 8 }}>
+          <div style={{ fontSize: 11, color: S.textSec, marginBottom: 10, padding: '8px 12px', background: S.bg, borderRadius: 8, border: `1px solid ${S.border}` }}>
             💡 Ajoute ta FC au repos (matin au réveil) pour des zones plus précises
           </div>
         )}
@@ -1990,7 +1992,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
           { Icon: Clock, val: `${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')}`, label: 'Volume', color: S.text },
           { Icon: Heart, val: wellScore !== null ? `${wellScore}%` : '—', label: 'Bien-être', color: wellScore ? scoreColor : S.textTer },
         ].map((item, i) => (
-          <Card key={i} style={{ padding: '16px 10px', textAlign: 'center', background: i === 0 ? `linear-gradient(145deg, ${USERS[uid].accent}20, ${USERS[uid].accent}08)` : S.card, border: i === 0 ? `1px solid ${USERS[uid].accent}30` : `1px solid ${S.border}` }}>
+          <Card key={i} style={{ padding: '16px 10px', textAlign: 'center', background: i === 0 ? `linear-gradient(145deg, ${USERS[uid].accent}14, ${USERS[uid].accent}06)` : S.card, border: i === 0 ? `1px solid ${USERS[uid].accent}25` : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><item.Icon size={16} color={item.color} strokeWidth={2} /></div>
             <div style={{ fontSize: 24, fontWeight: 900, color: item.color, letterSpacing: '-0.03em', lineHeight: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>{item.val}</div>
             <div style={{ fontSize: 9, color: S.textTer, marginTop: 5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{item.label}</div>
@@ -2173,15 +2175,17 @@ export default function App() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 0; }
         @keyframes pulse { 0%,60%,100% { opacity:0.3; transform:scale(0.8) } 30% { opacity:1; transform:scale(1) } }
+        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
         button { -webkit-tap-highlight-color: transparent; }
-        input, textarea, select { color-scheme: dark; }
-        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.25); }
-        input:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,0.28) !important; outline: none; }
-        select option { background: #1C1C1C; color: #fff; }
+        button:active:not(:disabled) { transform: scale(0.96); }
+        input, textarea, select { color-scheme: light; }
+        input::placeholder, textarea::placeholder { color: #AEAEB2; }
+        input:focus, textarea:focus, select:focus { border-color: #C7C7CC !important; outline: none; }
+        select option { background: #FFFFFF; color: #1C1C1E; }
         input[type=range] { height: 4px; }
       `}</style>
 
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(17,17,17,0.90)', backdropFilter: 'blur(28px) saturate(180%)', borderBottom: `1px solid ${S.border}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(24px) saturate(180%)', borderBottom: `1px solid ${S.border}` }}>
         <div style={{ maxWidth: 640, margin: '0 auto', padding: '13px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             {tab === 'home' ? (
@@ -2196,7 +2200,7 @@ export default function App() {
               <div style={{ fontSize: 18, fontWeight: 900, color: USERS[uid].accent, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: '"Barlow Condensed", sans-serif' }}>J‑{daysLeft()}</div>
               <div style={{ fontSize: 8, color: USERS[uid].accent, letterSpacing: '0.10em', fontWeight: 700, opacity: 0.65, marginTop: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>COURSE</div>
             </div>
-            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', border: `1px solid ${S.border}`, borderRadius: 99, padding: 3, gap: 2 }}>
+            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.06)', borderRadius: 99, padding: 3, gap: 2 }}>
               {['louis','romain'].map(u => (
                 <button key={u} onClick={() => setUid(u)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: uid === u ? USERS[u].accent : 'transparent', color: uid === u ? '#fff' : S.textTer, fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>{USERS[u].avatar}</button>
               ))}
@@ -2226,7 +2230,7 @@ export default function App() {
         )}
       </div>
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(10,10,10,0.93)', backdropFilter: 'blur(28px) saturate(180%)', borderTop: `1px solid ${S.border}`, display: 'flex', paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(24px) saturate(180%)', borderTop: `1px solid ${S.border}`, boxShadow: '0 -4px 16px rgba(0,0,0,0.06)', display: 'flex', paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         {tabs.map(t => {
           const active = tab === t.id
           return (
@@ -2238,7 +2242,7 @@ export default function App() {
               ) : (
                 <>
                   <t.Icon size={21} color={active ? USERS[uid].accent : S.textTer} strokeWidth={active ? 2.2 : 1.5} />
-                  {active && <div style={{ position: 'absolute', top: 6, width: 4, height: 4, borderRadius: '50%', background: USERS[uid].accent, boxShadow: `0 0 6px ${USERS[uid].accent}` }} />}
+                  {active && <div style={{ position: 'absolute', top: 6, width: 4, height: 4, borderRadius: '50%', background: USERS[uid].accent }} />}
                 </>
               )}
               <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, letterSpacing: active ? '0.02em' : 0 }}>{t.label}</span>
