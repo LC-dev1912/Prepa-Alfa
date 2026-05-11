@@ -1963,6 +1963,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
   const ws = weekStart()
   const week = sessions.filter(s => s.user_id === uid && new Date(s.date) >= ws)
   const totalMin = week.reduce((a, s) => a + (s.duration || 0), 0)
+  console.log('[Dashboard]', { uid, weekStart: ws.toISOString(), weekSessions: week, allUserSessions: sessions.filter(s => s.user_id === uid) })
   const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
