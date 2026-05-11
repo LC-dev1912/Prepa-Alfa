@@ -66,7 +66,7 @@ async function askCoach(system, messages) {
 
 const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-const weekStart = () => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0); return d }
+const weekStart = () => { const d = new Date(); const day = d.getDay() || 7; d.setDate(d.getDate() - day + 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
 function buildSystem(uid, sessions, wellness, userData = {}) {
   const ud = userData[uid] || {}
@@ -88,8 +88,7 @@ function buildSystem(uid, sessions, wellness, userData = {}) {
   // ── Score de forme ──
   const lastWell = w[0]
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
-  const ws = weekStart()
-  const wsStr = `${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`
+  const wsStr = weekStart()
   const weekSessions = userSessions.filter(s => s.date >= wsStr)
   const totalMin = weekSessions.reduce((a, s) => a + (s.duration || 0), 0)
   const loadScore = Math.min(100, (totalMin / 300) * 100)
@@ -991,7 +990,7 @@ function DuelPage({ sessions }) {
     })
   const score = (uid) => {
     const s = sessions.filter(x => x.user_id === uid)
-    const ws = weekStart(); const week = s.filter(x => new Date(x.date) >= ws)
+    const ws = weekStart(); const week = s.filter(x => x.date >= ws)
     const totalKm = s.filter(x => ['Course à pied','Vélo','Natation'].includes(x.discipline)).reduce((a, x) => a + (+x.distance || 0), 0)
     const rpe = week.length ? week.reduce((a, x) => a + (x.rpe || 0), 0) / week.length : 0
     return {
@@ -1283,11 +1282,13 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
 
   // Calendrier 2 semaines
   const buildWeekDays = (offsetWeeks) => {
-    const ws = weekStart()
+    const wsStr = weekStart()
+    const [yr, mo, dy] = wsStr.split('-').map(Number)
+    const wsDate = new Date(yr, mo - 1, dy) // minuit heure locale, pas UTC
     const names = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(ws); d.setDate(ws.getDate() + offsetWeeks * 7 + i)
+      const d = new Date(wsDate); d.setDate(wsDate.getDate() + offsetWeeks * 7 + i)
       const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       return { date: dateStr, name: names[i], num: d.getDate(), isToday: d.getTime() === today.getTime(), isPast: d < today, sessions: sessions.filter(s => s.user_id === uid && s.date === dateStr) }
     })
@@ -1324,7 +1325,7 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
   async function generateNutrition() {
     setGeneratingNutrition(true)
     try {
-      const weekMins = sessions.filter(s => s.user_id === uid && new Date(s.date) >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0)
+      const weekMins = sessions.filter(s => s.user_id === uid && s.date >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0)
       const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: `Génère mon plan nutritionnel pour les 7 prochains jours. Volume d'entraînement cette semaine : ${weekMins} minutes. Pour chaque jour donne : calories totales, protéines (g), glucides (g), lipides (g), et 2-3 repas/collations clés. Mets en avant les jours de grosse séance vs jours de repos. Sois concret, en français, format structuré.` }])
       setAiNutrition(reply)
     } catch { setAiNutrition('Erreur lors de la génération. Réessaie.') }
@@ -1961,9 +1962,8 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
 
 function Dashboard({ uid, sessions, wellness, onSave }) {
   const ws = weekStart()
-  const week = sessions.filter(s => s.user_id === uid && new Date(s.date) >= ws)
+  const week = sessions.filter(s => s.user_id === uid && s.date >= ws)
   const totalMin = week.reduce((a, s) => a + (s.duration || 0), 0)
-  console.log('[Dashboard]', { uid, weekStart: ws.toISOString(), weekSessions: week, allUserSessions: sessions.filter(s => s.user_id === uid) })
   const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
@@ -1977,9 +1977,11 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
     : formPct >= 45 ? { txt: '🟡 Entraînement modéré conseillé', c: S.yellow, bg: `${S.yellow}12` }
     : { txt: '🔴 Repos recommandé aujourd\'hui', c: S.red, bg: `${S.red}12` }
 
-  // Alertes surcharge
-  const prevWsStart = new Date(ws); prevWsStart.setDate(prevWsStart.getDate() - 7)
-  const prevWeek = sessions.filter(s => s.user_id === uid && new Date(s.date) >= prevWsStart && new Date(s.date) < ws)
+  // Alertes surcharge — semaine précédente en string locale
+  const [yr, mo, dy] = ws.split('-').map(Number)
+  const prevWsDate = new Date(yr, mo - 1, dy); prevWsDate.setDate(prevWsDate.getDate() - 7)
+  const prevWs = `${prevWsDate.getFullYear()}-${String(prevWsDate.getMonth()+1).padStart(2,'0')}-${String(prevWsDate.getDate()).padStart(2,'0')}`
+  const prevWeek = sessions.filter(s => s.user_id === uid && s.date >= prevWs && s.date < ws)
   const prevMin = prevWeek.reduce((a, s) => a + (s.duration || 0), 0)
   const volInc = prevMin > 20 ? Math.round((totalMin - prevMin) / prevMin * 100) : null
   const volAlert = volInc !== null && volInc > 10
