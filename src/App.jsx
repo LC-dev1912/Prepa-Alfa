@@ -2219,10 +2219,10 @@ export default function App() {
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 110px' }}>
         {booting ? <div style={{ textAlign: 'center', padding: 60, color: S.textSec }}>Chargement...</div> : (
           <>
-            {tab === 'home' && <Dashboard uid={uid} sessions={sessions} wellness={wellness} onSave={load} />}
-            {tab === 'session' && <SessionForm uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
-            {tab === 'coach' && <ChatPage uid={uid} sessions={sessions} wellness={wellness} userData={userData} />}
-            {tab === 'history' && <HistoryPage uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} userData={userData} />}
+            {tab === 'home' && <Dashboard key={uid} uid={uid} sessions={sessions} wellness={wellness} onSave={load} />}
+            {tab === 'session' && <SessionForm key={uid} uid={uid} sessions={sessions} onSave={load} onAnalyze={handleAnalyze} />}
+            {tab === 'coach' && <ChatPage key={uid} uid={uid} sessions={sessions} wellness={wellness} userData={userData} />}
+            {tab === 'history' && <HistoryPage key={uid} uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} userData={userData} />}
             {tab === 'plan' && <PlanPage key={uid} uid={uid} sessions={sessions} wellness={wellness} setSessions={setSessions} userData={userData} updateUserData={updateUserData} />}
             {tab === 'duel' && <DuelPage sessions={sessions} />}
             {tab === 'profil' && <ProfilePage key={uid} uid={uid} sessions={sessions} userData={userData} updateUserData={updateUserData} />}
