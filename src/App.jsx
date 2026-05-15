@@ -457,7 +457,8 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       duration = legsDur + transDur || +f.duration
     }
 
-    const session = {
+    // Whitelist strict : seules les colonnes existantes en base
+    const sessionPayload = {
       user_id: uid,
       date: f.date,
       discipline: f.discipline,
@@ -468,16 +469,15 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       hr_avg: f.hr_avg ? +f.hr_avg : null,
       hr_max: f.hr_max ? +f.hr_max : null,
       rpe: isFuture ? null : +f.rpe,
-      conditions: f.conditions || null,
       notes: Object.keys(extra).length ? JSON.stringify(extra) : null,
     }
 
-    console.log('Inserting session:', session)
+    console.log('Inserting session:', JSON.stringify(sessionPayload))
     try {
-      const { error } = await supabase.from('sessions').insert(session)
+      const { error } = await supabase.from('sessions').insert(sessionPayload)
       if (error) throw error
       await onSave()
-      onAnalyze(session, last)
+      onAnalyze(sessionPayload, last)
       setF(p => ({
         ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '',
         exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }],
@@ -485,7 +485,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
         brickTransitions: [''],
       }))
     } catch (e) {
-      console.error('Session insert error:', e)
+      console.error('Session insert error:', JSON.stringify(e), e)
       addToast('Impossible d\'enregistrer la séance')
     }
     setSaving(false)
@@ -2060,6 +2060,7 @@ export default function App() {
   const [booting, setBooting] = useState(true)
   const [userData, setUserData] = useState({})
   const [offline, setOffline] = useState(false)
+  const loadingRef = useRef(false)
 
   const updateUserData = useCallback((userId, key, value) => {
     setUserData(prev => ({
@@ -2069,6 +2070,8 @@ export default function App() {
   }, [])
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return
+    loadingRef.current = true
     try {
       const [{ data: s, error: e1 }, { data: w, error: e2 }, { data: ud, error: e3 }] = await Promise.all([
         supabase.from('sessions').select('*').order('date', { ascending: false }),
@@ -2129,8 +2132,10 @@ export default function App() {
         if (cw) setWellness(JSON.parse(cw))
       } catch {}
       setOffline(true)
+    } finally {
+      setBooting(false)
+      loadingRef.current = false
     }
-    setBooting(false)
   }, [])
 
   useEffect(() => { load() }, [load])
