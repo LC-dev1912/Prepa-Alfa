@@ -67,6 +67,7 @@ async function askCoach(system, messages) {
 const daysLeft = () => Math.max(0, Math.ceil((RACE_DATE - new Date()) / 86400000))
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 const weekStart = () => { const d = new Date(); const day = d.getDay() || 7; d.setDate(d.getDate() - day + 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+const fmtDuration = (sec) => { if (!sec) return '0:00'; const s = Math.round(sec); const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const ss = s % 60; return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}` }
 
 function buildSystem(uid, sessions, wellness, userData = {}) {
   const ud = userData[uid] || {}
@@ -90,13 +91,14 @@ function buildSystem(uid, sessions, wellness, userData = {}) {
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const wsStr = weekStart()
   const weekSessions = userSessions.filter(s => s.date >= wsStr)
-  const totalMin = weekSessions.reduce((a, s) => a + (s.duration || 0), 0)
-  const loadScore = Math.min(100, (totalMin / 300) * 100)
+  const totalSec = weekSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const loadScore = Math.min(100, (totalSec / 18000) * 100)
   const formPct = wellScore !== null ? Math.round(wellScore * 0.70 + (100 - loadScore * 0.5) * 0.30) : null
   const formTxt = formPct === null ? 'Données insuffisantes'
     : formPct >= 68 ? `${formPct}% — Prêt à s'entraîner fort`
     : formPct >= 45 ? `${formPct}% — Entraînement modéré conseillé`
     : `${formPct}% — Repos recommandé`
+  const totalMin = Math.floor(totalSec / 60)
 
   // ── Jalons ──
   const milestoneLines = [
@@ -153,11 +155,11 @@ ${milestoneLines}
 ${past.slice(0, 20).map(x => {
   let extra = {}; try { extra = JSON.parse(x.notes || '{}') } catch {}
   const typeInfo = extra.capType || extra.nageType || extra.veloType || extra.muscuFocus || ''
-  return `• ${x.date} | ${x.discipline}${typeInfo ? ` (${typeInfo})` : ''} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${extra.userNotes ? ` | "${extra.userNotes}"` : ''}`
+  return `• ${x.date} | ${x.discipline}${typeInfo ? ` (${typeInfo})` : ''} | ${fmtDuration(x.duration)}${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} | RPE ${x.rpe}/10${extra.userNotes ? ` | "${extra.userNotes}"` : ''}`
 }).join('\n') || 'Aucune séance passée.'}
 
 ━━ SÉANCES PLANIFIÉES (futures — sans RPE réel) ━━
-${future.slice(0, 10).map(x => `• ${x.date} | ${x.discipline} | ${x.duration}min${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [PLANIFIÉE]`).join('\n') || 'Aucune séance planifiée.'}
+${future.slice(0, 10).map(x => `• ${x.date} | ${x.discipline} | ${fmtDuration(x.duration)}${x.distance ? ` | ${x.distance}${x.distance_unit}` : ''} [PLANIFIÉE]`).join('\n') || 'Aucune séance planifiée.'}
 ⚠️ Ne jamais analyser les séances planifiées comme réalisées. S'en servir uniquement pour anticiper la charge future.
 
 ━━ BIEN-ÊTRE — 7 derniers jours ━━
@@ -361,7 +363,7 @@ function Milestones({ uid, sessions }) {
 function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   const addToast = useToast()
   const [f, setF] = useState({
-    date: todayStr(), discipline: 'Course à pied', duration: '', distance: '', distance_unit: 'km',
+    date: todayStr(), discipline: 'Course à pied', durationMin: '', durationSec: '0', distance: '', distance_unit: 'km',
     pace: '', hr_avg: '', hr_max: '', rpe: '6', conditions: '', notes: '', vitesse: '', denivele: '',
     nageType: 'Crawl', veloType: 'Route', capType: 'Footing', muscuFocus: 'Full body',
     exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }],
@@ -384,7 +386,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   const delta = last && f.distance && last.distance ? ((+f.distance - +last.distance) / +last.distance * 100).toFixed(1) : null
 
   const autoPace = (() => {
-    const dur = +f.duration, dist = +f.distance
+    const dur = ((+f.durationMin || 0) * 60 + (+f.durationSec || 0)) / 60, dist = +f.distance
     if (!dur || !dist) return null
     if (disc === 'Course à pied') {
       const pMin = dur / dist
@@ -414,10 +416,10 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
   const updSet = (ei, si, k, v) => { const e = [...f.exercises]; const sets = [...e[ei].sets]; sets[si] = { ...sets[si], [k]: v }; e[ei] = { ...e[ei], sets }; set('exercises', e) }
 
   async function submit() {
-    if (!f.duration) return
+    if (!f.durationMin) return
     // Validate inputs before sending to Supabase
-    const dur = +f.duration
-    if (!Number.isFinite(dur) || dur <= 0 || dur > 1440) { addToast('Durée invalide (1–1440 min)'); return }
+    const durSec = (+f.durationMin || 0) * 60 + Math.min(59, Math.max(0, +f.durationSec || 0))
+    if (!Number.isFinite(durSec) || durSec <= 0 || durSec > 86400) { addToast('Durée invalide (max 24h)'); return }
     if (f.distance && (!Number.isFinite(+f.distance) || +f.distance < 0)) { addToast('Distance invalide'); return }
     if (!isFuture && (+f.rpe < 1 || +f.rpe > 10)) { addToast('RPE invalide (1–10)'); return }
     if (f.hr_avg && (+f.hr_avg < 20 || +f.hr_avg > 250)) { addToast('FC moy invalide'); return }
@@ -448,13 +450,13 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
     if (f.notes) extra.userNotes = f.notes
     if (isFuture) extra.planned = true
 
-    // Compute duration (Brick = sum of legs + transitions)
-    let duration = +f.duration
+    // Compute duration in seconds (Brick = sum of legs + transitions, legs entered in minutes)
+    let duration = durSec
     if (disc === 'Brick') {
       const legs = f.brickLegs.filter(l => l.duration)
-      const legsDur = legs.reduce((a, l) => a + (+l.duration || 0), 0)
-      const transDur = f.brickTransitions.reduce((a, t) => a + (+t || 0), 0)
-      duration = legsDur + transDur || +f.duration
+      const legsDur = legs.reduce((a, l) => a + (+l.duration || 0) * 60, 0)
+      const transDur = f.brickTransitions.reduce((a, t) => a + (+t || 0) * 60, 0)
+      duration = legsDur + transDur || durSec
     }
 
     // Whitelist strict : seules les colonnes existantes en base
@@ -479,7 +481,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       await onSave()
       onAnalyze(sessionPayload, last)
       setF(p => ({
-        ...p, duration: '', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '',
+        ...p, durationMin: '', durationSec: '0', distance: '', pace: '', notes: '', rpe: '6', vitesse: '', denivele: '',
         exercises: [{ name: '', sets: [{ weight: '', reps: '' }] }],
         brickLegs: [{ discipline: 'Vélo', duration: '', distance: '' }, { discipline: 'Course à pied', duration: '', distance: '' }],
         brickTransitions: [''],
@@ -523,7 +525,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {timerSec > 0 && <span style={{ fontSize: 22, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: timerRunning ? USERS[uid].accent : S.text }}>{String(Math.floor(timerSec / 60)).padStart(2, '0')}:{String(timerSec % 60).padStart(2, '0')}</span>}
             {timerSec > 0 && !timerRunning && (
-              <button onClick={() => { set('duration', String(Math.round(timerSec / 60))); setTimerRunning(false); setTimerSec(0) }} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', background: S.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Utiliser</button>
+              <button onClick={() => { set('durationMin', String(Math.floor(timerSec / 60))); set('durationSec', String(timerSec % 60)); setTimerRunning(false); setTimerSec(0) }} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', background: S.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Utiliser</button>
             )}
             {timerSec > 0 && <button onClick={() => { setTimerRunning(false); setTimerSec(0) }} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: S.bg, color: S.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RotateCcw size={12} /></button>}
             <button onClick={() => setTimerRunning(r => !r)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: timerRunning ? USERS[uid].accent : S.bg, color: timerRunning ? '#fff' : S.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{timerRunning ? <Pause size={15} /> : <Play size={15} />}</button>
@@ -534,7 +536,14 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
       <Card style={{ padding: '14px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div><Label>Date</Label><input type="date" value={f.date} onChange={e => set('date', e.target.value)} style={inputStyle()} /></div>
-          <div><Label>Durée (min)</Label><input type="number" value={f.duration} placeholder="45" onChange={e => set('duration', e.target.value)} style={inputStyle()} /></div>
+          <div>
+            <Label>Durée</Label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="number" value={f.durationMin} placeholder="min" min="0" onChange={e => set('durationMin', e.target.value)} style={{ ...inputStyle(), flex: 2 }} />
+              <span style={{ color: S.textSec, fontSize: 13, flexShrink: 0 }}>:</span>
+              <input type="number" value={f.durationSec} placeholder="sec" min="0" max="59" onChange={e => set('durationSec', e.target.value)} style={{ ...inputStyle(), flex: 1 }} />
+            </div>
+          </div>
 
           {disc === 'Natation' && <>
             <div>
@@ -651,7 +660,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
         <div style={{ padding: '12px 14px', background: S.bg, borderRadius: S.radiusSm, fontSize: 13 }}>
           <div style={{ color: S.textSec, marginBottom: 6, fontWeight: 500 }}>Dernière {disc} — {last.date}</div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span><span style={{ color: S.textSec }}>Durée </span><strong>{last.duration}min</strong></span>
+            <span><span style={{ color: S.textSec }}>Durée </span><strong>{fmtDuration(last.duration)}</strong></span>
             {last.distance && <span><span style={{ color: S.textSec }}>Dist </span><strong>{last.distance}{last.distance_unit}</strong></span>}
             {delta !== null && <span style={{ fontWeight: 700, color: +delta >= 0 ? S.green : S.red }}>{+delta >= 0 ? '+' : ''}{delta}%</span>}
           </div>
@@ -662,7 +671,7 @@ function SessionForm({ uid, sessions, onSave, onAnalyze }) {
           Séance future — sera marquée comme "Planifiée"
         </div>
       )}
-      <button onClick={submit} disabled={saving || !f.duration} style={{ width: '100%', padding: '16px', borderRadius: S.radiusSm, border: 'none', background: saving || !f.duration ? S.bg : USERS[uid].accent, color: saving || !f.duration ? S.textSec : '#fff', fontSize: 16, fontWeight: 700, cursor: saving || !f.duration ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+      <button onClick={submit} disabled={saving || !f.durationMin} style={{ width: '100%', padding: '16px', borderRadius: S.radiusSm, border: 'none', background: saving || !f.durationMin ? S.bg : USERS[uid].accent, color: saving || !f.durationMin ? S.textSec : '#fff', fontSize: 16, fontWeight: 700, cursor: saving || !f.durationMin ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
         {saving ? 'Enregistrement...' : isFuture ? 'Planifier la séance' : 'Enregistrer la séance'}
       </button>
     </div>
@@ -679,7 +688,7 @@ function SessionDetail({ session, uid, sessions, wellness, userData }) {
   const bottomRef = useRef()
   useEffect(() => {
     if (!session) return
-    const msg = `Analyse cette séance : ${session.discipline}, ${session.date}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}${session.vitesse ? `, ${session.vitesse}km/h` : ''}, RPE ${session.rpe}/10${session.notes ? `, notes: ${session.notes}` : ''}.
+    const msg = `Analyse cette séance : ${session.discipline}, ${session.date}, ${fmtDuration(session.duration)}${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}${session.vitesse ? `, ${session.vitesse}km/h` : ''}, RPE ${session.rpe}/10${session.notes ? `, notes: ${session.notes}` : ''}.
 Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) Conseil prochain.`
     askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: msg }])
       .then(r => { setAnalysis(r); setLoadingAnalysis(false) })
@@ -719,7 +728,7 @@ Structure en 4 parties : 1) Bilan 2) Points positifs 3) Points à améliorer 4) 
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
         {[
-          { label: 'Durée', val: `${session.duration}min` },
+          { label: 'Durée', val: fmtDuration(session.duration) },
           { label: 'Distance', val: session.distance ? `${session.distance}${session.distance_unit}` : '—' },
           { label: 'RPE', val: session.rpe != null ? `${session.rpe}/10` : '—', color: session.rpe != null ? color : S.textSec },
           session.vitesse ? { label: 'Vitesse', val: `${session.vitesse}km/h` } : null,
@@ -826,7 +835,7 @@ function PlannedSessionSheet({ session, uid, onDone, open, onClose }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: session.distance ? '1fr 1fr' : '1fr', gap: 10 }}>
           <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: S.text }}>{session.duration}<span style={{ fontSize: 12, color: S.textSec, fontWeight: 400 }}>min</span></div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: S.text }}>{fmtDuration(session.duration)}</div>
             <div style={{ fontSize: 10, color: S.textSec, marginTop: 3 }}>Durée prévue</div>
           </div>
           {session.distance && (
@@ -934,7 +943,7 @@ function HistoryPage({ uid, sessions, wellness, setSessions, userData }) {
                 <div style={{ fontSize: 12, color: S.textSec, marginTop: 2 }}>{s.date}{s.distance ? ` · ${s.distance}${s.distance_unit}` : ''}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{s.duration}<span style={{ fontSize: 11, color: S.textSec }}>min</span></div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{fmtDuration(s.duration)}</div>
                 {!planned && <div style={{ fontSize: 11, color, fontWeight: 600 }}>RPE {s.rpe}</div>}
               </div>
               <ChevronRight size={16} color={S.textTer} />
@@ -994,7 +1003,7 @@ function DuelPage({ sessions }) {
     const totalKm = s.filter(x => ['Course à pied','Vélo','Natation'].includes(x.discipline)).reduce((a, x) => a + (+x.distance || 0), 0)
     const rpe = week.length ? week.reduce((a, x) => a + (x.rpe || 0), 0) / week.length : 0
     return {
-      Volume: Math.round(Math.min(100, week.reduce((a, x) => a + (x.duration || 0), 0) / 3)),
+      Volume: Math.round(Math.min(100, week.reduce((a, x) => a + (x.duration || 0), 0) / 180)),
       Intensité: Math.round(Math.min(100, (rpe / 10) * 100)),
       Régularité: Math.round(Math.min(100, (week.length / 4) * 100)),
       Progression: Math.round(Math.min(100, s.length * 5)),
@@ -1325,7 +1334,7 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
   async function generateNutrition() {
     setGeneratingNutrition(true)
     try {
-      const weekMins = sessions.filter(s => s.user_id === uid && s.date >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0)
+      const weekMins = Math.round(sessions.filter(s => s.user_id === uid && s.date >= weekStart()).reduce((a, s) => a + (s.duration || 0), 0) / 60)
       const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: `Génère mon plan nutritionnel pour les 7 prochains jours. Volume d'entraînement cette semaine : ${weekMins} minutes. Pour chaque jour donne : calories totales, protéines (g), glucides (g), lipides (g), et 2-3 repas/collations clés. Mets en avant les jours de grosse séance vs jours de repos. Sois concret, en français, format structuré.` }])
       setAiNutrition(reply)
     } catch { setAiNutrition('Erreur lors de la génération. Réessaie.') }
@@ -1383,7 +1392,7 @@ function PlanPage({ uid, sessions, wellness, setSessions, userData, updateUserDa
                             </div>
                           )
                         })}
-                        {hasReal && !hasPlanned && <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{day.sessions.filter(s => !isPlanned(s)).reduce((a, s) => a + (s.duration || 0), 0)}m</div>}
+                        {hasReal && !hasPlanned && <div style={{ fontSize: 8, color: S.green, fontWeight: 700 }}>{Math.round(day.sessions.filter(s => !isPlanned(s)).reduce((a, s) => a + (s.duration || 0), 0) / 60)}m</div>}
                         {hasPlanned && !hasReal && <div style={{ fontSize: 7, color: S.yellow, fontWeight: 700 }}>Planifié</div>}
                         {hasReal && hasPlanned && <div style={{ fontSize: 7, color: S.green, fontWeight: 700 }}>+plan</div>}
                       </div>
@@ -1515,7 +1524,8 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
   })()
 
   // Badges
-  const totalMin = userSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const totalSec = userSessions.reduce((a, s) => a + (s.duration || 0), 0)
+  const totalMin = Math.floor(totalSec / 60)
   const badges = [
     { icon: '🔥', label: '7j streak', earned: bestStreak >= 7, desc: '7 jours consécutifs' },
     { icon: '🔥', label: '30j streak', earned: bestStreak >= 30, desc: '30 jours consécutifs' },
@@ -1525,7 +1535,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
     { icon: '🚴', label: '20km vélo', earned: userSessions.some(s => s.discipline === 'Vélo' && +s.distance >= 20), desc: '20km en une séance' },
     { icon: '🏃', label: '5km course', earned: userSessions.some(s => s.discipline === 'Course à pied' && +s.distance >= 5), desc: '5km en une séance' },
     { icon: '⚡', label: '1er Brick', earned: userSessions.some(s => s.discipline === 'Brick'), desc: 'Première séance Brick' },
-    { icon: '⏱', label: '+1000min', earned: totalMin >= 1000, desc: '1000 min d\'entraînement' },
+    { icon: '⏱', label: '+1000min', earned: totalSec >= 60000, desc: '1000 min d\'entraînement' },
   ]
   const earnedCount = badges.filter(b => b.earned).length
 
@@ -1592,9 +1602,9 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
       const allRpe = ws.filter(s => s.rpe).map(s => +s.rpe)
       return {
         week: label,
-        Course: byDisc('Course à pied').reduce((a, s) => a + (s.duration || 0), 0),
-        Vélo: byDisc('Vélo').reduce((a, s) => a + (s.duration || 0), 0),
-        Natation: byDisc('Natation').reduce((a, s) => a + (s.duration || 0), 0),
+        Course: Math.round(byDisc('Course à pied').reduce((a, s) => a + (s.duration || 0), 0) / 60),
+        Vélo: Math.round(byDisc('Vélo').reduce((a, s) => a + (s.duration || 0), 0) / 60),
+        Natation: Math.round(byDisc('Natation').reduce((a, s) => a + (s.duration || 0), 0) / 60),
         CourseKm: +byDisc('Course à pied').filter(s => s.distance).reduce((a, s) => a + (s.distance_unit === 'm' ? +s.distance / 1000 : +s.distance), 0).toFixed(1),
         VéloKm: +byDisc('Vélo').filter(s => s.distance).reduce((a, s) => a + +s.distance, 0).toFixed(1),
         NatM: +byDisc('Natation').filter(s => s.distance).reduce((a, s) => a + natDist(s), 0).toFixed(0),
@@ -1772,7 +1782,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>séances totales</div>
           </div>
           <div style={{ background: S.bg, borderRadius: S.radiusSm, padding: '16px 12px', textAlign: 'center', border: `1px solid ${S.border}` }}>
-            <div style={{ fontSize: 40, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.round(totalMin / 60 * 10) / 10}h</div>
+            <div style={{ fontSize: 40, fontWeight: 900, color: S.text, fontFamily: '"Barlow Condensed", sans-serif', lineHeight: 1 }}>{Math.round(totalSec / 3600 * 10) / 10}h</div>
             <div style={{ fontSize: 10, color: S.textTer, marginTop: 5, letterSpacing: '0.06em', textTransform: 'uppercase' }}>d'entraînement</div>
           </div>
         </div>
@@ -1963,14 +1973,14 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
 function Dashboard({ uid, sessions, wellness, onSave }) {
   const ws = weekStart()
   const week = sessions.filter(s => s.user_id === uid && s.date >= ws)
-  const totalMin = week.reduce((a, s) => a + (s.duration || 0), 0)
+  const totalSec = week.reduce((a, s) => a + (s.duration || 0), 0)
   const lastWell = wellness.filter(w => w.user_id === uid).sort((a, b) => b.date.localeCompare(a.date))[0]
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
   const recent = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
 
   // Score de forme = wellness (70%) + inverse de la charge semaine (30%)
-  const loadScore = Math.min(100, (totalMin / 300) * 100)
+  const loadScore = Math.min(100, (totalSec / 18000) * 100)
   const formPct = wellScore !== null ? Math.round(wellScore * 0.70 + (100 - loadScore * 0.5) * 0.30) : null
   const formRec = formPct === null ? null
     : formPct >= 68 ? { txt: "🟢 Prêt à s'entraîner fort", c: S.green, bg: `${S.green}12` }
@@ -1982,8 +1992,8 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
   const prevWsDate = new Date(yr, mo - 1, dy); prevWsDate.setDate(prevWsDate.getDate() - 7)
   const prevWs = `${prevWsDate.getFullYear()}-${String(prevWsDate.getMonth()+1).padStart(2,'0')}-${String(prevWsDate.getDate()).padStart(2,'0')}`
   const prevWeek = sessions.filter(s => s.user_id === uid && s.date >= prevWs && s.date < ws)
-  const prevMin = prevWeek.reduce((a, s) => a + (s.duration || 0), 0)
-  const volInc = prevMin > 20 ? Math.round((totalMin - prevMin) / prevMin * 100) : null
+  const prevSec = prevWeek.reduce((a, s) => a + (s.duration || 0), 0)
+  const volInc = prevSec > 1200 ? Math.round((totalSec - prevSec) / prevSec * 100) : null
   const volAlert = volInc !== null && volInc > 10
   const last3 = [...sessions].filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
   const rpeAlert = last3.length >= 3 && last3.every(s => (s.rpe || 0) > 7.5)
@@ -1992,7 +2002,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
         {[
           { Icon: Calendar, val: week.length, label: 'Séances', color: USERS[uid].accent },
-          { Icon: Clock, val: `${Math.floor(totalMin / 60)}h${String(totalMin % 60).padStart(2, '0')}`, label: 'Volume', color: S.text },
+          { Icon: Clock, val: `${Math.floor(totalSec / 3600)}h${String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0')}`, label: 'Volume', color: S.text },
           { Icon: Heart, val: wellScore !== null ? `${wellScore}%` : '—', label: 'Bien-être', color: wellScore ? scoreColor : S.textTer },
         ].map((item, i) => (
           <Card key={i} style={{ padding: '16px 10px', textAlign: 'center', background: i === 0 ? `linear-gradient(145deg, ${USERS[uid].accent}14, ${USERS[uid].accent}06)` : S.card, border: i === 0 ? `1px solid ${USERS[uid].accent}25` : undefined }}>
@@ -2039,7 +2049,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
                   <div style={{ fontSize: 12, color: S.textSec }}>{s.date}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{s.duration}min</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.text }}>{fmtDuration(s.duration)}</div>
                   {s.distance && <div style={{ fontSize: 11, color: S.textSec }}>{s.distance}{s.distance_unit}</div>}
                 </div>
               </div>
@@ -2158,7 +2168,7 @@ export default function App() {
 
   async function handleAnalyze(session, last) {
     try {
-      const msg = `Séance : ${session.discipline}, ${session.duration}min${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}, RPE ${session.rpe}/10.${session.notes ? ` Notes: ${session.notes}.` : ''}${last ? ` Dernière (${last.date}): ${last.duration}min, RPE ${last.rpe}/10.` : ''} Analyse en 4 lignes max.`
+      const msg = `Séance : ${session.discipline}, ${fmtDuration(session.duration)}${session.distance ? `, ${session.distance}${session.distance_unit}` : ''}, RPE ${session.rpe}/10.${session.notes ? ` Notes: ${session.notes}.` : ''}${last ? ` Dernière (${last.date}): ${fmtDuration(last.duration)}, RPE ${last.rpe}/10.` : ''} Analyse en 4 lignes max.`
       const reply = await askCoach(buildSystem(uid, sessions, wellness, userData), [{ role: 'user', content: msg }])
       setAnalysis(reply)
     } catch {}
