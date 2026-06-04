@@ -1979,6 +1979,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
   const recent = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
+  console.log('[Dashboard] recent sessions:', recent, '| uid:', uid, '| all user_ids:', [...new Set(sessions.map(s => s.user_id))])
 
   // Score de forme = wellness (70%) + inverse de la charge semaine (30%)
   const loadScore = Math.min(100, (totalSec / 18000) * 100)
