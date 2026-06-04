@@ -2134,14 +2134,13 @@ export default function App() {
       setUserData(byUser)
     } catch (e) {
       console.error('Load error:', e)
-      // Fallback : dernières données connues depuis le cache sessionStorage
       try {
         const cs = sessionStorage.getItem('cache_sessions')
         const cw = sessionStorage.getItem('cache_wellness')
         if (cs) setSessions(JSON.parse(cs))
         if (cw) setWellness(JSON.parse(cw))
       } catch {}
-      setOffline(true)
+      setOffline(!navigator.onLine)
     } finally {
       setBooting(false)
       loadingRef.current = false
