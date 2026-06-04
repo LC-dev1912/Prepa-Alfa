@@ -2088,6 +2088,9 @@ export default function App() {
         supabase.from('wellness').select('*').order('date', { ascending: false }),
         supabase.from('user_data').select('*'),
       ])
+      console.log('[load] sessions data:', s, '| error:', e1)
+      console.log('[load] wellness data:', w, '| error:', e2)
+      console.log('[load] user_data data:', ud, '| error:', e3)
       if (e1 || e2 || e3) throw new Error('Supabase fetch failed')
 
       // Cache pour fallback hors-ligne
