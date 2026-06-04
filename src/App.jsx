@@ -1971,7 +1971,8 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
 }
 
 function Dashboard({ uid, sessions, wellness, onSave }) {
-  console.log('[Dashboard] uid:', uid, '| sessions.length:', sessions.length, '| user_ids in data:', [...new Set(sessions.map(s => s.user_id))])
+  console.log('[Dashboard] uid:', JSON.stringify(uid), '| sessions.length:', sessions.length)
+  console.log('[Dashboard] raw user_ids:', sessions.map(s => JSON.stringify(s.user_id)), '| match:', sessions.map(s => s.user_id === uid))
   const ws = weekStart()
   const week = sessions.filter(s => s.user_id === uid && s.date >= ws)
   const totalSec = week.reduce((a, s) => a + (s.duration || 0), 0)
@@ -1979,7 +1980,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
   const wellScore = lastWell ? Math.round(((lastWell.sleep + (6 - lastWell.fatigue) + lastWell.mood) / 15) * 100) : null
   const scoreColor = wellScore >= 70 ? S.green : wellScore >= 40 ? S.yellow : S.red
   const recent = sessions.filter(s => s.user_id === uid).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3)
-  console.log('[Dashboard] recent sessions:', recent, '| uid:', uid, '| all user_ids:', [...new Set(sessions.map(s => s.user_id))])
+  console.log('[Dashboard] recent.length:', recent.length, '| recent dates:', recent.map(s => s.date + ' uid=' + JSON.stringify(s.user_id)))
 
   // Score de forme = wellness (70%) + inverse de la charge semaine (30%)
   const loadScore = Math.min(100, (totalSec / 18000) * 100)
