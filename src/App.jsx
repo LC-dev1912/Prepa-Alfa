@@ -1971,6 +1971,7 @@ function ProfilePage({ uid, sessions, userData, updateUserData }) {
 }
 
 function Dashboard({ uid, sessions, wellness, onSave }) {
+  console.log('[Dashboard] uid:', uid, '| sessions.length:', sessions.length, '| user_ids in data:', [...new Set(sessions.map(s => s.user_id))])
   const ws = weekStart()
   const week = sessions.filter(s => s.user_id === uid && s.date >= ws)
   const totalSec = week.reduce((a, s) => a + (s.duration || 0), 0)
