@@ -17,7 +17,7 @@ const ORANGE = '#FC4C02'
 const BLUE = '#3B82F6'
 
 const USERS = {
-  louis: { name: 'Louis', accent: ORANGE, avatar: 'L', profile: 'Musculation 3 ans, régulier 1 an (4x/sem). Bonne base de force. Ne court pas. Sait nager.' },
+  Louis: { name: 'Louis', accent: ORANGE, avatar: 'L', profile: 'Musculation 3 ans, régulier 1 an (4x/sem). Bonne base de force. Ne court pas. Sait nager.' },
   romain: { name: 'Romain', accent: BLUE, avatar: 'R', profile: 'Reprend le sport de zéro. Ne court pas. Sait nager. A un VTT.' },
 }
 
@@ -1010,13 +1010,13 @@ function DuelPage({ sessions }) {
       Endurance: Math.round(Math.min(100, totalKm / 2)),
     }
   }
-  const ls = score('louis'), rs = score('romain')
+  const ls = score('Louis'), rs = score('romain')
   const radarData = Object.keys(ls).map(k => ({ subject: k, Louis: ls[k], Romain: rs[k] }))
   const lTotal = Object.values(ls).reduce((a, v) => a + v, 0), rTotal = Object.values(rs).reduce((a, v) => a + v, 0)
-  const leader = lTotal >= rTotal ? 'louis' : 'romain'
+  const leader = lTotal >= rTotal ? 'Louis' : 'romain'
 
   const ChartCard = ({ title, disc, unit = 'km' }) => {
-    const lw = getWeeks('louis', disc), rw = getWeeks('romain', disc)
+    const lw = getWeeks('Louis', disc), rw = getWeeks('romain', disc)
     const data = lw.map((w, i) => ({ week: w.week, Louis: w.val, Romain: rw[i].val }))
     return (
       <Card style={{ marginBottom: 12 }}>
@@ -1065,7 +1065,7 @@ function DuelPage({ sessions }) {
           </RadarChart>
         </ResponsiveContainer>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8 }}>
-          {['louis','romain'].map(u => <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: USERS[u].accent }}><div style={{ width: 12, height: 3, background: USERS[u].accent, borderRadius: 99 }} />{USERS[u].name}</div>)}
+          {['Louis','romain'].map(u => <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: USERS[u].accent }}><div style={{ width: 12, height: 3, background: USERS[u].accent, borderRadius: 99 }} />{USERS[u].name}</div>)}
         </div>
       </Card>
       <ChartCard title="Course à pied — km / semaine" disc="Course à pied" unit="km" />
@@ -2065,7 +2065,7 @@ function Dashboard({ uid, sessions, wellness, onSave }) {
 }
 
 export default function App() {
-  const [uid, setUid] = useState('louis')
+  const [uid, setUid] = useState('Louis')
   const [tab, setTab] = useState('home')
   const [sessions, setSessions] = useState([])
   const [wellness, setWellness] = useState([])
@@ -2224,7 +2224,7 @@ export default function App() {
               <div style={{ fontSize: 8, color: USERS[uid].accent, letterSpacing: '0.10em', fontWeight: 700, opacity: 0.65, marginTop: 1, fontFamily: '"Barlow Condensed", sans-serif' }}>COURSE</div>
             </div>
             <div style={{ display: 'flex', background: 'rgba(0,0,0,0.06)', borderRadius: 99, padding: 3, gap: 2 }}>
-              {['louis','romain'].map(u => (
+              {['Louis','romain'].map(u => (
                 <button key={u} onClick={() => setUid(u)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: uid === u ? USERS[u].accent : 'transparent', color: uid === u ? '#fff' : S.textTer, fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>{USERS[u].avatar}</button>
               ))}
             </div>
